@@ -1,4 +1,3 @@
-// NGUOI PHU TRACH: Huu (ca nhom dung chung - muon sua cau truc thi bao Huu)
 // Day cung la cau truc du lieu chuan cua database.
 
 export const ORDER_STATUS = {

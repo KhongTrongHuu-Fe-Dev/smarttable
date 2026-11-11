@@ -1,4 +1,4 @@
-# Tai lieu do an (NGUOI PHU TRACH: E)
+# Tai lieu do an
 
 - [ ] use-case.md   - Use case + dac ta
 - [ ] erd.png       - So do database
