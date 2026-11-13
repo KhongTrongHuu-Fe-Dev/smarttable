@@ -75,4 +75,31 @@ export const mockOrders = [
       { menu_item_id: "m2", quantity: 1, note: null },
     ],
   },
+  {
+    id: "o2",
+    table_id: "t2",
+    status: ORDER_STATUS.PENDING,
+    total: 150000,
+    created_at: "2026-11-06T19:42:00+07:00",
+    items: [{ menu_item_id: "m2", quantity: 2, note: "cay vua" }],
+  },
+  {
+    id: "o3",
+    table_id: "t3",
+    status: ORDER_STATUS.PENDING,
+    total: 110000,
+    created_at: "2026-11-06T19:45:00+07:00",
+    items: [
+      { menu_item_id: "m3", quantity: 1, note: null },
+      { menu_item_id: "m4", quantity: 2, note: "it da" },
+    ],
+  },
+  {
+    id: "o4",
+    table_id: "t2",
+    status: ORDER_STATUS.DONE,
+    total: 85000,
+    created_at: "2026-11-06T19:20:00+07:00",
+    items: [{ menu_item_id: "m1", quantity: 1, note: null }],
+  },
 ];
