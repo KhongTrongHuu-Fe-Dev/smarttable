@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCart } from "./CartContext";
@@ -39,6 +39,7 @@ export default function CustomerShell({ children, tableId }) {
         {children}
       </main>
 
+      {/* Nút giỏ hàng nổi */}
       <Link
         href={`/table/${tableId}/cart`}
         aria-label={`Giỏ hàng, ${totalCount} món`}
