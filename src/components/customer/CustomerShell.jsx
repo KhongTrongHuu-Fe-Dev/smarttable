@@ -27,7 +27,7 @@ export default function CustomerShell({ children, tableId }) {
               <Link
                 key={link.href}
                 href={link.href}
-                className="rounded-xl bg-gray-100 px-3 py-2 text-gray-700 hover:bg-orange-100"
+                className="rounded-xl bg-gray-100 px-3 py-2 text-gray-700 hover:bg-orange-500 hover:text-white"
               >
                 {link.label}
               </Link>
@@ -36,9 +36,22 @@ export default function CustomerShell({ children, tableId }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl p-4">
+      <main className="mx-auto w-full max-w-5xl p-4 pb-24">
         {children}
       </main>
+
+      {/* Nút giỏ hàng nổi */}
+      <Link
+        href={`/table/${tableId}/cart`}
+        aria-label={`Giỏ hàng, ${totalCount} món`}
+        className="fixed bottom-4 right-4 z-30 flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white shadow-lg hover:bg-orange-600"
+      >
+        <span aria-hidden>🛒</span>
+        <span>Giỏ hàng</span>
+        <span className="min-w-6 rounded-full bg-white px-1.5 text-center text-sm text-orange-600">
+          {totalCount}
+        </span>
+      </Link>
     </div>
   );
 }
