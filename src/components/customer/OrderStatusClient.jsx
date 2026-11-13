@@ -31,10 +31,8 @@ export default function OrderStatusClient({ tableId }) {
   const [usingMock, setUsingMock] = useState(false);
   const [error, setError] = useState("");
 
-  const loadOrders = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
+  // Lay don hang, tra ve ket qua (khong set state o day)
+  const fetchOrders = useCallback(async () => {
     try {
       const response = await fetch(
         `/api/orders?table_id=${encodeURIComponent(tableId)}`,
@@ -52,24 +50,40 @@ export default function OrderStatusClient({ tableId }) {
         throw new Error("Dữ liệu đơn hàng không đúng định dạng.");
       }
 
-      setOrders(list);
-      setUsingMock(false);
+      return { orders: list, usingMock: false, error: "" };
     } catch {
-      const sampleOrders = mockOrders.filter(
-        (order) => String(order.table_id) === String(tableId)
-      );
-
-      setOrders(sampleOrders);
-      setUsingMock(true);
-      setError("Đang hiển thị dữ liệu mẫu vì API chưa sẵn sàng.");
-    } finally {
-      setLoading(false);
+      return {
+        orders: mockOrders.filter(
+          (order) => String(order.table_id) === String(tableId)
+        ),
+        usingMock: true,
+        error: "Đang hiển thị dữ liệu mẫu vì API chưa sẵn sàng.",
+      };
     }
   }, [tableId]);
 
+  const applyResult = useCallback((result) => {
+    setOrders(result.orders);
+    setUsingMock(result.usingMock);
+    setError(result.error);
+    setLoading(false);
+  }, []);
+
+  const loadOrders = useCallback(() => {
+    setLoading(true);
+    setError("");
+    fetchOrders().then(applyResult);
+  }, [fetchOrders, applyResult]);
+
   useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+    let cancelled = false;
+    fetchOrders().then((result) => {
+      if (!cancelled) applyResult(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchOrders, applyResult]);
 
   const selectedOrder = requestedOrderId
     ? orders.find((order) => String(order.id) === requestedOrderId)
