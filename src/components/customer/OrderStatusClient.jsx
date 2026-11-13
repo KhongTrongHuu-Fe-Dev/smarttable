@@ -31,7 +31,6 @@ export default function OrderStatusClient({ tableId }) {
   const [usingMock, setUsingMock] = useState(false);
   const [error, setError] = useState("");
 
-  // Lay don hang, tra ve ket qua (khong set state o day)
   const fetchOrders = useCallback(async () => {
     try {
       const response = await fetch(
@@ -77,20 +76,28 @@ export default function OrderStatusClient({ tableId }) {
 
   useEffect(() => {
     let cancelled = false;
+
     fetchOrders().then((result) => {
-      if (!cancelled) applyResult(result);
+      if (!cancelled) {
+        applyResult(result);
+      }
     });
+
     return () => {
       cancelled = true;
     };
   }, [fetchOrders, applyResult]);
 
-  const selectedOrder = requestedOrderId
-    ? orders.find((order) => String(order.id) === requestedOrderId)
-    : [...orders].sort(
-        (a, b) =>
-          new Date(b.created_at || 0) - new Date(a.created_at || 0)
-      )[0];
+  const sortedOrders = [...orders].sort(
+    (a, b) =>
+      new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  );
+
+  const displayedOrders = requestedOrderId
+    ? sortedOrders.filter(
+        (order) => String(order.id) === requestedOrderId
+      )
+    : sortedOrders;
 
   if (loading) {
     return <p className="p-6 text-gray-500">Đang tải đơn hàng...</p>;
@@ -119,7 +126,7 @@ export default function OrderStatusClient({ tableId }) {
         </div>
       )}
 
-      {!selectedOrder ? (
+      {displayedOrders.length === 0 ? (
         <div className="rounded-xl border bg-white p-8 text-center">
           <div className="text-5xl">🧾</div>
           <h3 className="mt-4 font-semibold">Chưa có đơn hàng</h3>
@@ -134,84 +141,105 @@ export default function OrderStatusClient({ tableId }) {
           </Link>
         </div>
       ) : (
-        <article className="space-y-5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap justify-between gap-2">
-            <div>
-              <p className="text-sm text-gray-500">Mã đơn hàng</p>
-              <h3 className="font-bold">{selectedOrder.id}</h3>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Trạng thái</p>
-              <p className="font-semibold text-orange-600">
-                {getStatusLabel(selectedOrder.status)}
-              </p>
-            </div>
-          </div>
-
-          {usingMock && (
-            <p className="text-xs text-gray-500">
-              Đây là đơn hàng minh họa từ dữ liệu mẫu, không phải đơn vừa đặt.
+        <div className="space-y-5">
+          {!requestedOrderId && (
+            <p className="text-sm text-gray-500">
+              Có {displayedOrders.length} đơn hàng
             </p>
           )}
 
-          <div className="space-y-4">
-            {STATUS_STEPS.map((step, index) => {
-              const currentIndex = STATUS_STEPS.findIndex(
-                (item) => item.value === selectedOrder.status
-              );
-              const completed = currentIndex >= index;
+          {displayedOrders.map((order) => {
+            const currentIndex = STATUS_STEPS.findIndex(
+              (step) => step.value === order.status
+            );
 
-              return (
-                <div key={step.value} className="flex items-center gap-3">
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold ${
-                      completed
-                        ? "bg-orange-500 text-white"
-                        : "bg-gray-100 text-gray-400"
-                    }`}
-                  >
-                    {completed ? "✓" : index + 1}
-                  </div>
+            return (
+              <article
+                key={order.id}
+                className="space-y-5 rounded-xl border border-gray-100 bg-white p-5 shadow-sm"
+              >
+                <div className="flex flex-wrap justify-between gap-2">
                   <div>
-                    <p
-                      className={
-                        completed
-                          ? "font-semibold text-gray-900"
-                          : "text-gray-400"
-                      }
-                    >
-                      {step.label}
+                    <p className="text-sm text-gray-500">Mã đơn hàng</p>
+                    <h3 className="font-bold">{order.id}</h3>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Trạng thái</p>
+                    <p className="font-semibold text-orange-600">
+                      {getStatusLabel(order.status)}
                     </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
 
-          {Array.isArray(selectedOrder.items) && (
-            <div className="border-t pt-4">
-              <h4 className="mb-3 font-semibold">Chi tiết món</h4>
-              {selectedOrder.items.map((item, index) => (
-                <div
-                  key={`${item.menu_item_id}-${index}`}
-                  className="flex justify-between gap-3 py-2 text-sm"
-                >
-                  <span>
-                    {item.name || item.menu_item_id} × {item.quantity}
-                    {item.note ? ` · ${item.note}` : ""}
+                {usingMock && (
+                  <p className="text-xs text-gray-500">
+                    Đây là đơn hàng minh họa từ dữ liệu mẫu, không phải đơn vừa đặt.
+                  </p>
+                )}
+
+                <div className="space-y-4">
+                  {STATUS_STEPS.map((step, index) => {
+                    const completed =
+                      currentIndex >= 0 && currentIndex >= index;
+
+                    return (
+                      <div
+                        key={step.value}
+                        className="flex items-center gap-3"
+                      >
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold ${
+                            completed
+                              ? "bg-orange-500 text-white"
+                              : "bg-gray-100 text-gray-400"
+                          }`}
+                        >
+                          {completed ? "✓" : index + 1}
+                        </div>
+
+                        <p
+                          className={
+                            completed
+                              ? "font-semibold text-gray-900"
+                              : "text-gray-400"
+                          }
+                        >
+                          {step.label}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {Array.isArray(order.items) && (
+                  <div className="border-t pt-4">
+                    <h4 className="mb-3 font-semibold">Chi tiết món</h4>
+
+                    {order.items.map((item, index) => (
+                      <div
+                        key={`${item.menu_item_id}-${index}`}
+                        className="flex justify-between gap-3 py-2 text-sm"
+                      >
+                        <span>
+                          {item.name || item.menu_item_id} × {item.quantity}
+                          {item.note ? ` · ${item.note}` : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex justify-between border-t pt-4 font-bold">
+                  <span>Tổng tiền</span>
+                  <span className="text-orange-600">
+                    {formatPrice(order.total)}
                   </span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex justify-between border-t pt-4 font-bold">
-            <span>Tổng tiền</span>
-            <span className="text-orange-600">
-              {formatPrice(selectedOrder.total)}
-            </span>
-          </div>
-        </article>
+              </article>
+            );
+          })}
+        </div>
       )}
     </section>
   );
