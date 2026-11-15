@@ -5,6 +5,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -13,6 +14,35 @@ const CartContext = createContext(null);
 
 export function CartProvider({ children }) {
   const [items, setItems] = useState([]);
+  const [cartHydrated, setCartHydrated] = useState(false);
+
+  // Khôi phục giỏ hàng sau khi tải lại trang.
+  useEffect(() => {
+    try {
+      const savedCart = localStorage.getItem("smarttable-cart");
+      if (savedCart) {
+        const parsedCart = JSON.parse(savedCart);
+        if (Array.isArray(parsedCart)) {
+          setItems(parsedCart);
+        }
+      }
+    } catch (error) {
+      console.error("Không thể khôi phục giỏ hàng:", error);
+    } finally {
+      setCartHydrated(true);
+    }
+  }, []);
+
+  // Chỉ lưu sau khi đã khôi phục dữ liệu ban đầu.
+  useEffect(() => {
+    if (!cartHydrated) return;
+
+    try {
+      localStorage.setItem("smarttable-cart", JSON.stringify(items));
+    } catch (error) {
+      console.error("Không thể lưu giỏ hàng:", error);
+    }
+  }, [items, cartHydrated]);
 
   // Thêm món; nếu món đã tồn tại thì cộng dồn số lượng.
   const addItem = useCallback((menuItem, quantity = 1) => {
