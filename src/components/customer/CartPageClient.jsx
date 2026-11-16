@@ -2,6 +2,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "./CartContext";
 
@@ -10,6 +11,7 @@ function formatPrice(price) {
 }
 
 export default function CartPageClient({ tableId }) {
+  const router = useRouter();
   const {
     items,
     removeItem,
@@ -21,15 +23,12 @@ export default function CartPageClient({ tableId }) {
   } = useCart();
 
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [orderId, setOrderId] = useState(null);
 
   async function handleSubmitOrder() {
     if (items.length === 0 || submitting) return;
 
     setSubmitting(true);
-    setMessage("");
     setError("");
 
     try {
@@ -66,8 +65,7 @@ export default function CartPageClient({ tableId }) {
 
       // Chỉ xóa giỏ sau khi nhận được đơn hàng hợp lệ.
       clearCart();
-      setOrderId(data.id);
-      setMessage("Đặt món thành công! Đơn hàng đã được gửi đến nhà bếp.");
+      router.push(`/table/${tableId}/status?orderId=${data.id}`);
     } catch (err) {
       setError(
         err.message || "Có lỗi xảy ra khi gửi đơn hàng."
@@ -85,28 +83,6 @@ export default function CartPageClient({ tableId }) {
           Bàn {tableId} · {totalCount} món
         </p>
       </div>
-
-      {message && (
-        <div
-          role="status"
-          className="rounded-xl bg-green-100 p-4 text-green-700"
-        >
-          <p>{message}</p>
-
-          <div className="mt-3">
-            <Link
-              href={
-                orderId
-                  ? `/table/${tableId}/status?orderId=${orderId}`
-                  : `/table/${tableId}/status`
-              }
-              className="font-semibold underline"
-            >
-              Theo dõi đơn hàng
-            </Link>
-          </div>
-        </div>
-      )}
 
       {error && (
         <div
