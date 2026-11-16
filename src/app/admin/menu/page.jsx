@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { mockMenu, mockCategories } from "@/data/mock";
+import CategoryManager from "@/components/admin/CategoryManager";
 
 // Sprint 1: chưa có src/lib/format.js trên nhánh main.
 // Khi Huy bổ sung hàm dùng chung, thay hàm này bằng:
@@ -66,6 +67,8 @@ const inputClass =
 
 export default function AdminMenuPage() {
   const [items, setItems] = useState(() => mockMenu.map((item) => ({ ...item })));
+  const [categories, setCategories] = useState(() => mockCategories.map((item) => ({ ...item })));
+  const [activeTab, setActiveTab] = useState("menu");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -86,11 +89,11 @@ export default function AdminMenuPage() {
   }, [items, search, categoryFilter]);
 
   const getCategoryName = (categoryId) =>
-    mockCategories.find((category) => category.id === categoryId)?.name ?? "Chưa phân loại";
+    categories.find((category) => category.id === categoryId)?.name ?? "Chưa phân loại";
 
   function openCreateForm() {
     setEditingId(null);
-    setForm({ ...emptyForm, category_id: mockCategories[0]?.id ?? "" });
+    setForm({ ...emptyForm, category_id: categories[0]?.id ?? "" });
     setIsFormOpen(true);
     setMessage("");
   }
@@ -130,7 +133,7 @@ export default function AdminMenuPage() {
       window.alert("Vui lòng nhập tên món và giá tiền hợp lệ.");
       return;
     }
-    if (!mockCategories.some((category) => category.id === form.category_id)) {
+    if (!categories.some((category) => category.id === form.category_id)) {
       window.alert("Vui lòng chọn một danh mục hợp lệ.");
       return;
     }
@@ -179,6 +182,35 @@ export default function AdminMenuPage() {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-8">
+      <div role="tablist" aria-label="Quản lý thực đơn" className="flex w-fit max-w-full flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "menu"}
+          onClick={() => setActiveTab("menu")}
+          className={`rounded-lg px-5 py-2.5 text-sm font-bold transition ${activeTab === "menu" ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          Món ăn
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "categories"}
+          onClick={() => setActiveTab("categories")}
+          className={`rounded-lg px-5 py-2.5 text-sm font-bold transition ${activeTab === "categories" ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+        >
+          Danh mục
+        </button>
+      </div>
+
+      {activeTab === "categories" ? (
+        <CategoryManager
+          categories={categories}
+          onChange={setCategories}
+          itemCategoryIds={items.map((item) => item.category_id)}
+        />
+      ) : (
+        <>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-orange-500">
@@ -252,7 +284,7 @@ export default function AdminMenuPage() {
               className={`${inputClass} sm:w-44`}
             >
               <option value="all">Tất cả danh mục</option>
-              {mockCategories.map((category) => (
+              {categories.map((category) => (
                 <option key={category.id} value={category.id}>{category.name}</option>
               ))}
             </select>
@@ -394,7 +426,7 @@ export default function AdminMenuPage() {
                 <Field label="Danh mục" required>
                   <select name="category_id" value={form.category_id} onChange={updateForm} required className={inputClass}>
                     <option value="">Chọn danh mục</option>
-                    {mockCategories.map((category) => (
+                    {categories.map((category) => (
                       <option key={category.id} value={category.id}>{category.name}</option>
                     ))}
                   </select>
@@ -432,6 +464,8 @@ export default function AdminMenuPage() {
             </form>
           </section>
         </div>
+      )}
+        </>
       )}
     </div>
   );
