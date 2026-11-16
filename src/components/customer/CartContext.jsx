@@ -17,20 +17,31 @@ export function CartProvider({ children }) {
   const [cartHydrated, setCartHydrated] = useState(false);
 
   // Khôi phục giỏ hàng sau khi tải lại trang.
+  // Đọc localStorage sau khi render lần đầu (tránh lệch giao diện server/client).
+  // Đặt state trong callback bất đồng bộ để không gọi setState trực tiếp trong effect.
   useEffect(() => {
-    try {
-      const savedCart = localStorage.getItem("smarttable-cart");
-      if (savedCart) {
-        const parsedCart = JSON.parse(savedCart);
-        if (Array.isArray(parsedCart)) {
-          setItems(parsedCart);
+    let cancelled = false;
+
+    Promise.resolve().then(() => {
+      if (cancelled) return;
+      try {
+        const savedCart = localStorage.getItem("smarttable-cart");
+        if (savedCart) {
+          const parsedCart = JSON.parse(savedCart);
+          if (Array.isArray(parsedCart)) {
+            setItems(parsedCart);
+          }
         }
+      } catch (error) {
+        console.error("Không thể khôi phục giỏ hàng:", error);
+      } finally {
+        setCartHydrated(true);
       }
-    } catch (error) {
-      console.error("Không thể khôi phục giỏ hàng:", error);
-    } finally {
-      setCartHydrated(true);
-    }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Chỉ lưu sau khi đã khôi phục dữ liệu ban đầu.
