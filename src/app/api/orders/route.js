@@ -1,3 +1,4 @@
+import { requireRole, ROLES } from "@/lib/supabase/server";
 import { supabase } from "@/lib/supabase/client";
 import { ORDER_STATUS } from "@/data/mock";
 
@@ -78,10 +79,15 @@ export async function POST(request) {
 
 // PATCH { id, status }
 export async function PATCH(request) {
+  // Bếp và admin được đổi trạng thái; chỉ admin được chuyển sang "paid".
+  const auth = await requireRole([ROLES.ADMIN, ROLES.KITCHEN]);
+  if (auth.error) return auth.error;
+  const { supabase } = auth;
   if (!supabase) return fail("Chua cau hinh Supabase.", 503);
 
   const { id, status } = (await request.json().catch(() => ({}))) ?? {};
   if (!id || !VALID_STATUS.includes(status)) return fail("id hoac status khong hop le.");
+  if (status === ORDER_STATUS.PAID && auth.role !== ROLES.ADMIN) return fail("Chi admin duoc danh dau da thanh toan.", 403);
 
   const { data, error } = await supabase
     .from("orders")

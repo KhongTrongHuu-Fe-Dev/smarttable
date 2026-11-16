@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import LogoutButton from "@/components/LogoutButton";
 
 const menuItems = [
   { label: "Tổng quan", href: "/admin", icon: "overview" },
@@ -134,6 +135,7 @@ export default function AdminLayout({ children }) {
             <h1 className="mt-1 text-xl font-bold text-slate-900">{currentPage.label}</h1>
           </div>
           <div className="flex items-center gap-3">
+            <LogoutButton />
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-800">Quản trị viên</p>
               <p className="text-xs text-slate-500">Administrator</p>

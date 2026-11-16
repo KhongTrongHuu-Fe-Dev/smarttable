@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ORDER_STATUS } from "@/data/mock";
 import OrderCard from "@/components/kitchen/OrderCard";
+import LogoutButton from "@/components/LogoutButton";
 
 // Mỗi cột: trạng thái, tiêu đề, nút chuyển sang trạng thái kế tiếp
 const COLUMNS = [
@@ -105,6 +106,7 @@ export default function KitchenPage() {
     <div className="min-h-screen bg-gray-100 p-6">
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Màn hình bếp</h1>
+        <div className="flex gap-2">
         <button
           type="button"
           onClick={async () => applyResult(await fetchKitchenData())}
@@ -112,6 +114,8 @@ export default function KitchenPage() {
         >
           Tải lại
         </button>
+        <LogoutButton className="bg-white text-gray-700" />
+        </div>
       </div>
 
       {error && (

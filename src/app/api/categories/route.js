@@ -1,3 +1,4 @@
+import { requireRole, ROLES } from "@/lib/supabase/server";
 import { supabase } from "@/lib/supabase/client";
 
 export async function GET() {
@@ -19,6 +20,10 @@ export async function GET() {
 
 export async function POST(request) {
   try {
+    // Chỉ admin được ghi dữ liệu. `supabase` bên dưới mang quyền người đăng nhập (RLS).
+    const auth = await requireRole([ROLES.ADMIN]);
+    if (auth.error) return auth.error;
+    const { supabase } = auth;
     if (!supabase) {
       return Response.json({ error: "Chưa kết nối Supabase" }, { status: 500 });
     }

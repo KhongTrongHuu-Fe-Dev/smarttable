@@ -299,6 +299,13 @@ const res = await fetch("/api/menu"); const { items } = await res.json();
 
 Huy tạo sẵn 2 tài khoản test trên Supabase và gửi nhóm: `admin@smarttable.test`, `bep@smarttable.test`.
 
+**Cách hoạt động (SCRUM-19):**
+- Vai trò lưu trong `app_metadata.role` của tài khoản Supabase: `admin` hoặc `kitchen`. Chỉ admin Supabase gán được.
+- `src/proxy.js` chặn trang: chưa đăng nhập vào `/admin`, `/kitchen` -> đẩy về `/login`; bếp vào `/admin` -> đẩy về `/kitchen`.
+- API ghi dữ liệu (POST/PATCH/DELETE của menu, categories, tables, orders PATCH) gọi `requireRole([...])` trong `src/lib/supabase/server.js`: trả **401** nếu chưa đăng nhập, **403** nếu sai vai trò. API đọc (GET) và khách tạo đơn (POST /api/orders) vẫn công khai.
+- Hàm đăng nhập/đăng xuất: `src/lib/supabase/auth.js`. Luật RLS trong database: `docs/sql/auth_rls.sql` (đọc kỹ thứ tự chạy ở đầu file).
+- Viết API ghi mới thì **bắt buộc** gọi `requireRole` ở đầu hàm.
+
 ---
 
 ## 8. Giao diện chung (Đạt quyết, mọi người theo)

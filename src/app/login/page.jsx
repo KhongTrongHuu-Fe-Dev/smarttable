@@ -1,12 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { signIn } from "@/lib/supabase/auth";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   function validate() {
     const next = {};
@@ -16,16 +20,23 @@ export default function LoginPage() {
     return next;
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setMessage("");
     const next = validate();
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
-    // TODO (sau SCRUM-19): gọi Supabase Auth, rồi chuyển trang:
+    setLoading(true);
+    const result = await signIn(email.trim(), password);
+    if (result.error) {
+      setMessage(result.error);
+      setLoading(false);
+      return;
+    }
     // admin -> /admin, bếp -> /kitchen
-    setMessage("Giao diện sẵn sàng. Chức năng đăng nhập sẽ nối Supabase Auth sau.");
+    router.replace(result.home);
+    router.refresh();
   }
 
   const inputClass = (hasError) =>
@@ -77,13 +88,16 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          className="mt-6 w-full rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white hover:bg-orange-600"
+          disabled={loading}
+          className="mt-6 w-full rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
         >
-          Đăng nhập
+          {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
 
         {message && (
-          <p className="mt-4 rounded-xl bg-orange-50 p-3 text-sm text-orange-700">{message}</p>
+          <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+            {message}
+          </p>
         )}
       </form>
     </main>
