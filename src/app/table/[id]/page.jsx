@@ -17,6 +17,9 @@ export default function Page() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [keyword, setKeyword] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
+  const [imageError, setImageError] = useState(false);
+  const [detailQuantity, setDetailQuantity] = useState(1);
+  const [detailNote, setDetailNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -68,8 +71,15 @@ export default function Page() {
     });
   }, [menuItems, selectedCategory, keyword]);
 
-  function handleAddItem(item) {
-    addItem(item, 1);
+  function handleAddItem(item, quantity = 1, note = "") {
+    addItem(
+      {
+        ...item,
+        note: note.trim(),
+      },
+      quantity
+    );
+
     setMessage(`Đã thêm ${item.name} vào giỏ hàng`);
     setTimeout(() => setMessage(""), 2000);
   }
@@ -173,7 +183,12 @@ export default function Page() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedItem(item)}
+                    onClick={() => {
+                      setSelectedItem(item);
+                      setImageError(false);
+                      setDetailQuantity(1);
+                      setDetailNote("");
+                    }}
                     className="flex-1 rounded-xl bg-gray-100 px-3 py-2 text-sm font-medium hover:bg-gray-200"
                   >
                     Chi tiết
@@ -203,10 +218,23 @@ export default function Page() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="menu-detail-title"
-            className="w-full max-w-md space-y-4 rounded-xl bg-white p-5"
+            className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-xl bg-white p-5"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="text-center text-5xl">🍽️</div>
+            <div className="overflow-hidden rounded-xl bg-gray-100">
+              {selectedItem.image_url && !imageError ? (
+                <img
+                  src={selectedItem.image_url}
+                  alt={selectedItem.name}
+                  className="h-56 w-full object-cover"
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <div className="flex h-56 items-center justify-center text-6xl">
+                  🍽️
+                </div>
+              )}
+            </div>
 
             <h3 id="menu-detail-title" className="text-xl font-bold">
               {selectedItem.name}
@@ -216,20 +244,75 @@ export default function Page() {
               {selectedItem.description || "Chưa có mô tả"}
             </p>
 
-            <p className="font-bold text-orange-600">
+            <p className="text-xl font-bold text-orange-600">
               {formatPrice(selectedItem.price)}
             </p>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold">
+                Số lượng
+              </label>
+
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  disabled={detailQuantity <= 1}
+                  onClick={() =>
+                    setDetailQuantity((quantity) =>
+                      Math.max(1, quantity - 1)
+                    )
+                  }
+                  className="h-10 w-10 rounded-lg bg-gray-100 text-xl font-bold disabled:opacity-40"
+                >
+                  −
+                </button>
+
+                <span className="min-w-8 text-center font-semibold">
+                  {detailQuantity}
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDetailQuantity((quantity) => quantity + 1)
+                  }
+                  className="h-10 w-10 rounded-lg bg-gray-100 text-xl font-bold"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label
+                htmlFor="menu-detail-note"
+                className="block text-sm font-semibold"
+              >
+                Ghi chú món ăn
+              </label>
+
+              <textarea
+                id="menu-detail-note"
+                value={detailNote}
+                onChange={(event) => setDetailNote(event.target.value)}
+                placeholder="Ví dụ: ít cay, không hành..."
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none focus:border-orange-500"
+              />
+            </div>
 
             <button
               type="button"
               disabled={!selectedItem.is_available}
               onClick={() => {
-                handleAddItem(selectedItem);
+                handleAddItem(selectedItem, detailQuantity, detailNote);
                 setSelectedItem(null);
+                setDetailQuantity(1);
+                setDetailNote("");
               }}
-              className="w-full rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white disabled:bg-gray-300"
+              className="w-full rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
             >
-              Thêm vào giỏ hàng
+              Thêm {detailQuantity} món vào giỏ hàng
             </button>
 
             <button
