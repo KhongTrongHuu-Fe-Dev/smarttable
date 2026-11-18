@@ -1,100 +1,114 @@
-import { requireRole, ROLES } from "@/lib/supabase/server";
 import { supabase } from "@/lib/supabase/client";
-import { ORDER_STATUS } from "@/data/mock";
-
-const VALID_STATUS = Object.values(ORDER_STATUS);
 
 function fail(message, status = 400) {
-  return Response.json({ message }, { status });
+  return Response.json({ error: message }, { status });
 }
 
-// GET /api/orders?table_id=1  (khong co table_id -> tat ca don, dung cho bep/admin)
+// GET /api/orders?status=pending,cooking&table_id=&date=2026-11-16
 export async function GET(request) {
-  if (!supabase) return fail("Chua cau hinh Supabase.", 503);
+  if (!supabase) return fail("Chưa cấu hình Supabase.", 503);
 
-  const tableId = new URL(request.url).searchParams.get("table_id");
+  const { searchParams } = new URL(request.url);
+  const statusParam = searchParams.get("status");
+  const tableId = searchParams.get("table_id");
+  const date = searchParams.get("date");
+
   let query = supabase
     .from("orders")
     .select("*, order_items(menu_item_id, quantity, price, note, menu_items(name))")
     .order("created_at", { ascending: false });
-  if (tableId) query = query.eq("table_id", tableId);
+
+  if (statusParam) {
+    const statuses = statusParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (statuses.length === 1) {
+      query = query.eq("status", statuses[0]);
+    } else if (statuses.length > 1) {
+      query = query.in("status", statuses);
+    }
+  }
+
+  if (tableId) {
+    query = query.eq("table_id", tableId);
+  }
+
+  if (date) {
+    query = query
+      .gte("created_at", `${date}T00:00:00+07:00`)
+      .lte("created_at", `${date}T23:59:59.999+07:00`);
+  }
 
   const { data, error } = await query;
   if (error) return fail(error.message, 500);
 
-  const orders = data.map(({ order_items, ...order }) => ({
+  const orders = (data || []).map(({ order_items, ...order }) => ({
     ...order,
-    items: order_items.map(({ menu_items, ...it }) => ({
-      ...it,
-      name: menu_items?.name,
+    items: (order_items || []).map(({ menu_items, ...it }) => ({
+      menu_item_id: it.menu_item_id,
+      name: menu_items?.name || "",
+      price: it.price,
+      quantity: it.quantity,
+      note: it.note ?? null,
     })),
   }));
-  return Response.json({ orders });
+
+  return Response.json(orders);
 }
 
-// POST { table_id, items: [{ menu_item_id, quantity, note }] }
+// POST /api/orders { table_id, items: [{ menu_item_id, quantity, note }] }
 export async function POST(request) {
-  if (!supabase) return fail("Chua cau hinh Supabase.", 503);
+  if (!supabase) return fail("Chưa cấu hình Supabase.", 503);
 
   const body = await request.json().catch(() => null);
   const items = body?.items;
   if (!body?.table_id || !Array.isArray(items) || items.length === 0) {
-    return fail("Thieu table_id hoac danh sach mon.");
+    return fail("Thiếu table_id hoặc danh sách món.");
   }
 
-  // Lay gia that tu database, khong tin gia client gui len
+  // Lấy giá thật và tên món từ database, không tin số tiền client gửi lên
   const ids = items.map((i) => i.menu_item_id);
   const { data: menu, error: menuErr } = await supabase
     .from("menu_items")
-    .select("id, price, is_available")
+    .select("id, name, price, is_available")
     .in("id", ids);
   if (menuErr) return fail(menuErr.message, 500);
 
-  const byId = new Map(menu.map((m) => [String(m.id), m]));
+  const byId = new Map((menu || []).map((m) => [String(m.id), m]));
   const rows = [];
   let total = 0;
+
   for (const it of items) {
     const m = byId.get(String(it.menu_item_id));
     const qty = Number(it.quantity);
-    if (!m || !m.is_available) return fail(`Mon ${it.menu_item_id} khong ton tai hoac da het.`);
-    if (!Number.isInteger(qty) || qty < 1) return fail("So luong khong hop le.");
-    total += m.price * qty;
-    rows.push({ menu_item_id: m.id, quantity: qty, price: m.price, note: it.note || null });
+    if (!m || m.is_available === false) {
+      return fail(`Món ${it.menu_item_id} không tồn tại hoặc đã hết.`);
+    }
+    if (!Number.isInteger(qty) || qty < 1) {
+      return fail("Số lượng không hợp lệ.");
+    }
+    total += Number(m.price) * qty;
+    rows.push({
+      menu_item_id: m.id,
+      name: m.name,
+      quantity: qty,
+      price: Number(m.price),
+      note: it.note ?? null,
+    });
   }
 
   const { data: order, error: orderErr } = await supabase
     .from("orders")
-    .insert({ table_id: body.table_id, status: ORDER_STATUS.PENDING, total })
+    .insert({ table_id: body.table_id, status: "pending", total })
     .select()
     .single();
   if (orderErr) return fail(orderErr.message, 500);
 
   const { error: itemsErr } = await supabase
     .from("order_items")
-    .insert(rows.map((r) => ({ ...r, order_id: order.id })));
+    .insert(rows.map(({ name, ...r }) => ({ ...r, order_id: order.id })));
   if (itemsErr) return fail(itemsErr.message, 500);
 
   return Response.json({ ...order, items: rows }, { status: 201 });
-}
-
-// PATCH { id, status }
-export async function PATCH(request) {
-  // Bếp và admin được đổi trạng thái; chỉ admin được chuyển sang "paid".
-  const auth = await requireRole([ROLES.ADMIN, ROLES.KITCHEN]);
-  if (auth.error) return auth.error;
-  const { supabase } = auth;
-  if (!supabase) return fail("Chua cau hinh Supabase.", 503);
-
-  const { id, status } = (await request.json().catch(() => ({}))) ?? {};
-  if (!id || !VALID_STATUS.includes(status)) return fail("id hoac status khong hop le.");
-  if (status === ORDER_STATUS.PAID && auth.role !== ROLES.ADMIN) return fail("Chi admin duoc danh dau da thanh toan.", 403);
-
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ status })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) return fail(error.message, 500);
-  return Response.json(data);
 }
