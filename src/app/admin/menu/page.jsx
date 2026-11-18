@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { mockMenu, mockCategories } from "@/data/mock";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { formatPrice } from "@/lib/format";
 import CategoryManager from "@/components/admin/CategoryManager";
 
-// Sprint 1: chưa có src/lib/format.js trên nhánh main.
-// Khi Huy bổ sung hàm dùng chung, thay hàm này bằng:
-// import { formatPrice } from "@/lib/format";
-const formatPrice = (value) => Number(value).toLocaleString("vi-VN") + "đ";
+async function menuRequest(url, options = {}) {
+  const response = await fetch(url, { cache: "no-store", ...options });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Không thể thực hiện thao tác.");
+  return data;
+}
 
 const emptyForm = {
   name: "",
@@ -66,8 +68,13 @@ const inputClass =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
 
 export default function AdminMenuPage() {
-  const [items, setItems] = useState(() => mockMenu.map((item) => ({ ...item })));
-  const [categories, setCategories] = useState(() => mockCategories.map((item) => ({ ...item })));
+  const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const mutationLock = useRef(false);
+  const [loadVersion, setLoadVersion] = useState(0);
   const [activeTab, setActiveTab] = useState("menu");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -76,6 +83,50 @@ export default function AdminMenuPage() {
   const [form, setForm] = useState(emptyForm);
   const [message, setMessage] = useState("");
 
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadMenu() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await menuRequest("/api/menu", { signal: controller.signal });
+        if (!Array.isArray(data.items) || !Array.isArray(data.categories)) {
+          throw new Error("Dữ liệu thực đơn không hợp lệ.");
+        }
+        if (!controller.signal.aborted) {
+          setItems(data.items);
+          setCategories(data.categories);
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) setError(err.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+    loadMenu();
+    return () => controller.abort();
+  }, [loadVersion]);
+
+  async function mutate(url, method, payload, onSuccess) {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const data = await menuRequest(url, {
+        method,
+        ...(payload ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : {}),
+      });
+      onSuccess(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      mutationLock.current = false;
+      setBusy(false);
+    }
+  }
+
   const availableCount = items.filter((item) => item.is_available).length;
   const soldOutCount = items.length - availableCount;
 
@@ -83,7 +134,7 @@ export default function AdminMenuPage() {
     const keyword = search.trim().toLocaleLowerCase("vi-VN");
     return items.filter((item) => {
       const matchedName = item.name.toLocaleLowerCase("vi-VN").includes(keyword);
-      const matchedCategory = categoryFilter === "all" || item.category_id === categoryFilter;
+      const matchedCategory = categoryFilter === "all" || String(item.category_id) === categoryFilter;
       return matchedName && matchedCategory;
     });
   }, [items, search, categoryFilter]);
@@ -114,6 +165,7 @@ export default function AdminMenuPage() {
   }
 
   function closeForm() {
+    if (mutationLock.current) return;
     setIsFormOpen(false);
     setEditingId(null);
   }
@@ -123,7 +175,7 @@ export default function AdminMenuPage() {
     setForm((previous) => ({ ...previous, [name]: type === "checkbox" ? checked : value }));
   }
 
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault();
     const name = form.name.trim();
     const price = Number(form.price);
@@ -133,7 +185,8 @@ export default function AdminMenuPage() {
       window.alert("Vui lòng nhập tên món và giá tiền hợp lệ.");
       return;
     }
-    if (!categories.some((category) => category.id === form.category_id)) {
+    const selectedCategory = categories.find((category) => String(category.id) === String(form.category_id));
+    if (!selectedCategory) {
       window.alert("Vui lòng chọn một danh mục hợp lệ.");
       return;
     }
@@ -147,41 +200,53 @@ export default function AdminMenuPage() {
       price,
       description: form.description.trim(),
       image_url: form.image_url.trim() || null,
-      category_id: form.category_id,
+      category_id: selectedCategory.id,
       spicy_level: spicyLevel,
       is_available: form.is_available,
     };
 
     if (editingId !== null) {
-      setItems((previous) =>
-        previous.map((item) => (item.id === editingId ? { ...item, ...payload } : item))
-      );
-      setMessage(`Đã cập nhật món “${name}”.`);
+      const original = items.find((item) => item.id === editingId);
+      const changes = Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== original[key]));
+      if (Object.keys(changes).length === 0) {
+        closeForm();
+        return;
+      }
+      await mutate(`/api/menu/${encodeURIComponent(editingId)}`, "PATCH", changes, (saved) => {
+        setItems((previous) => previous.map((item) => item.id === editingId ? saved : item));
+        setMessage(`Đã cập nhật món “${name}”.`);
+        setIsFormOpen(false);
+      });
     } else {
-      setItems((previous) => [{ id: `m-${crypto.randomUUID()}`, ...payload }, ...previous]);
-      setMessage(`Đã thêm món “${name}”.`);
+      await mutate("/api/menu", "POST", payload, (saved) => {
+        setItems((previous) => [saved, ...previous]);
+        setMessage(`Đã thêm món “${name}”.`);
+        setIsFormOpen(false);
+      });
     }
-    closeForm();
   }
 
   function handleDelete(item) {
     const confirmed = window.confirm(`Bạn có chắc muốn xóa món “${item.name}” không?`);
     if (!confirmed) return;
-    setItems((previous) => previous.filter((row) => row.id !== item.id));
-    setMessage(`Đã xóa món “${item.name}”.`);
+    mutate(`/api/menu/${encodeURIComponent(item.id)}`, "DELETE", null, () => {
+      setItems((previous) => previous.filter((row) => row.id !== item.id));
+      setMessage(`Đã xóa món “${item.name}”.`);
+    });
   }
 
   function toggleAvailable(item) {
-    setItems((previous) =>
-      previous.map((row) =>
-        row.id === item.id ? { ...row, is_available: !row.is_available } : row
-      )
-    );
-    setMessage(`Đã ${item.is_available ? "tạm ngừng bán" : "mở bán"} món “${item.name}”.`);
+    mutate(`/api/menu/${encodeURIComponent(item.id)}`, "PATCH", { is_available: !item.is_available }, (saved) => {
+      setItems((previous) => previous.map((row) => row.id === item.id ? saved : row));
+      setMessage(`Đã ${item.is_available ? "tạm ngừng bán" : "mở bán"} món “${item.name}”.`);
+    });
   }
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-8">
+      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}{!isFormOpen && <button type="button" disabled={busy || loading} onClick={() => setLoadVersion((value) => value + 1)} className="ml-4 underline">Tải lại</button>}</div>}
+      {loading && <p role="status">Đang tải thực đơn...</p>}
+      <fieldset disabled={busy || loading} className="min-w-0 space-y-6 disabled:opacity-70">
       <div role="tablist" aria-label="Quản lý thực đơn" className="flex w-fit max-w-full flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
         <button
           type="button"
@@ -206,6 +271,7 @@ export default function AdminMenuPage() {
       {activeTab === "categories" ? (
         <CategoryManager
           categories={categories}
+          readOnly
           onChange={setCategories}
           itemCategoryIds={items.map((item) => item.category_id)}
         />
@@ -384,7 +450,7 @@ export default function AdminMenuPage() {
           </table>
         </div>
         <div className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
-          Dữ liệu dùng thử trong Sprint 1 · Các thay đổi chỉ được lưu tạm khi trang đang mở.
+          Dữ liệu từ API · Thay đổi được lưu sau khi máy chủ xác nhận thành công.
         </div>
       </section>
 
@@ -408,6 +474,7 @@ export default function AdminMenuPage() {
               </button>
             </div>
             <form onSubmit={handleSave} className="max-h-[75vh] space-y-5 overflow-y-auto px-6 py-5">
+              {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field label="Tên món" required>
                   <input name="name" value={form.name} onChange={updateForm} required maxLength={120} placeholder="Ví dụ: Cơm chiên hải sản" className={inputClass} />
@@ -467,6 +534,7 @@ export default function AdminMenuPage() {
       )}
         </>
       )}
+      </fieldset>
     </div>
   );
 }
