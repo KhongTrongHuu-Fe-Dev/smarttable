@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { ORDER_STATUS } from "@/data/mock";
+import { requireRole, ROLES } from "@/lib/supabase/server";
 
 const VALID_STATUS = Object.values(ORDER_STATUS);
 
@@ -40,6 +41,10 @@ export async function GET(request, { params }) {
 
 // PATCH /api/orders/[id] { status } (Đổi trạng thái đơn)
 export async function PATCH(request, { params }) {
+  // Bếp và admin được đổi trạng thái; chỉ admin được chuyển sang "paid".
+  const auth = await requireRole([ROLES.ADMIN, ROLES.KITCHEN]);
+  if (auth.error) return auth.error;
+  const { supabase } = auth;
   if (!supabase) return fail("Chưa cấu hình Supabase.", 503);
 
   const { id } = await params;
@@ -47,6 +52,10 @@ export async function PATCH(request, { params }) {
 
   if (!status || !VALID_STATUS.includes(status)) {
     return fail("Trạng thái đơn hàng không hợp lệ.", 400);
+  }
+
+  if (status === ORDER_STATUS.PAID && auth.role !== ROLES.ADMIN) {
+    return fail("Chỉ admin được đánh dấu đã thanh toán.", 403);
   }
 
   const { data, error } = await supabase

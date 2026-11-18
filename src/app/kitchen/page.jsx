@@ -43,7 +43,8 @@ async function fetchKitchenData() {
     }
     // Bàn chỉ để hiện số bàn; lỗi thì dùng table_id thay thế.
     const tablesData = tablesRes.ok ? await tablesRes.json() : [];
-    return { orders: ordersData.orders ?? [], tables: Array.isArray(tablesData) ? tablesData : [], error: "" };
+    const list = Array.isArray(ordersData) ? ordersData : ordersData.orders;
+    return { orders: list ?? [], tables: Array.isArray(tablesData) ? tablesData : [], error: "" };
   } catch (err) {
     return { orders: null, tables: null, error: err.message || "Không tải được đơn." };
   }
@@ -87,10 +88,10 @@ export default function KitchenPage() {
       current.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
     );
     try {
-      const res = await fetch("/api/orders", {
+      const res = await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: orderId, status: nextStatus }),
+        body: JSON.stringify({ status: nextStatus }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
