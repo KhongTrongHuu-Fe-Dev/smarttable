@@ -10,6 +10,7 @@ const menuItems = [
   { label: "Bàn", href: "/admin/tables", icon: "tables" },
   { label: "Đơn hàng", href: "/admin/orders", icon: "orders" },
   { label: "Mã QR", href: "/admin/qr", icon: "qr" },
+  { label: "Màn hình bếp", href: "/kitchen", icon: "orders" },
 ];
 
 function MenuIcon({ name }) {

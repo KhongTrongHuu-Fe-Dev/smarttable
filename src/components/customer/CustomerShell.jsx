@@ -10,6 +10,7 @@ export default function CustomerShell({ children, tableId }) {
     { href: `/table/${tableId}`, label: "Thực đơn" },
     { href: `/table/${tableId}/cart`, label: `Giỏ hàng (${totalCount})` },
     { href: `/table/${tableId}/status`, label: "Đơn hàng" },
+    { href: `/table/${tableId}/chat`, label: "Hỏi AI" },
   ];
 
   return (

@@ -1,69 +1,108 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+// Trang chủ: một điểm vào chung.
+// Khách thật sự vào bằng QR ở bàn (/table/[id]); trang này tiện cho demo và nhân viên.
+export default function HomePage() {
+  const router = useRouter();
+  const [tables, setTables] = useState([]);
+  const [tableId, setTableId] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadTables() {
+      try {
+        const res = await fetch("/api/tables", { cache: "no-store" });
+        const data = await res.json();
+        if (!cancelled && res.ok && Array.isArray(data)) {
+          setTables(data);
+          setTableId((current) => current || String(data[0]?.id ?? ""));
+        }
+      } catch {
+        // Không tải được danh sách bàn thì để khách tự nhập số bàn.
+      }
+    }
+    loadTables();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function goToTable(event) {
+    event.preventDefault();
+    const id = String(tableId).trim();
+    if (id) router.push(`/table/${encodeURIComponent(id)}`);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.js
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md space-y-4">
+        <header className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900">SmartTable</h1>
+          <p className="mt-1 text-sm text-gray-500">Gọi món tại bàn bằng mã QR</p>
+        </header>
+
+        <form
+          onSubmit={goToTable}
+          className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200"
+        >
+          <h2 className="font-semibold text-gray-900">Tôi là khách</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Quét mã QR trên bàn, hoặc chọn bàn của bạn ở đây.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+          <label htmlFor="table" className="mt-4 mb-1 block text-sm font-medium text-gray-900">
+            Bàn số
+          </label>
+          {tables.length > 0 ? (
+            <select
+              id="table"
+              value={tableId}
+              onChange={(e) => setTableId(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              {tables.map((table) => (
+                <option key={table.id} value={table.id}>
+                  Bàn {table.number ?? table.id}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="table"
+              inputMode="numeric"
+              value={tableId}
+              onChange={(e) => setTableId(e.target.value)}
+              placeholder="Ví dụ: 1"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-gray-900 outline-none focus:ring-2 focus:ring-orange-500"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          )}
+
+          <button
+            type="submit"
+            disabled={!String(tableId).trim()}
+            className="mt-4 w-full rounded-xl bg-orange-500 px-4 py-3 font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
           >
-            Documentation
-          </a>
+            Vào gọi món
+          </button>
+        </form>
+
+        <div className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
+          <h2 className="font-semibold text-gray-900">Tôi là nhân viên</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Đăng nhập một lần, hệ thống tự chuyển đến trang của bạn: bếp vào màn hình bếp, quản trị viên vào trang quản trị.
+          </p>
+          <Link
+            href="/login"
+            className="mt-4 block w-full rounded-xl bg-gray-900 px-4 py-3 text-center font-semibold text-white hover:bg-gray-800"
+          >
+            Đăng nhập nhân viên
+          </Link>
         </div>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 }
