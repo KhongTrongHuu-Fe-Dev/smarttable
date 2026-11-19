@@ -10,7 +10,7 @@ const fieldClass =
  * categories và onChange dùng chung state với trang món ăn,
  * nên tên danh mục vừa sửa được cập nhật ngay trong bảng món ăn.
  */
-export default function CategoryManager({ categories, onChange, itemCategoryIds = [] }) {
+export default function CategoryManager({ categories, onChange, itemCategoryIds = [], readOnly = false }) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [formName, setFormName] = useState("");
@@ -112,6 +112,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
         <button
           type="button"
           onClick={openCreate}
+          disabled={readOnly}
           className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600"
         >
           + Thêm danh mục
@@ -178,6 +179,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
                       <button
                         type="button"
                         onClick={() => openEdit(category)}
+                        disabled={readOnly}
                         className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-600 hover:bg-orange-50 hover:text-orange-700"
                       >
                         Sửa
@@ -185,6 +187,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
                       <button
                         type="button"
                         onClick={() => deleteCategory(category)}
+                        disabled={readOnly}
                         className="rounded-lg border border-red-200 px-3 py-2 font-semibold text-red-600 hover:bg-red-50"
                       >
                         Xóa
@@ -204,7 +207,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
           </table>
         </div>
         <p className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
-          Dữ liệu giả · Danh mục đang chứa món chỉ được xóa sau khi chuyển hết các món sang danh mục khác.
+          {readOnly ? "Danh mục từ API · Chức năng chỉnh sửa danh mục sẽ được nối API trong task riêng." : "Dữ liệu giả · Danh mục đang chứa món chỉ được xóa sau khi chuyển hết các món sang danh mục khác."}
         </p>
       </div>
 
