@@ -1,9 +1,9 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/components/customer/CartContext";
 import { formatPrice } from "@/lib/format";
-import { mockMenu } from "@/data/mock";
 
 // Lịch sử chat đúng dạng sẽ gửi lên POST /api/chat (docs/LIEN_KET.md 3.4):
 // [{ role: "user", text }, { role: "ai", text }]
@@ -12,18 +12,6 @@ const GREETING = {
   role: "ai",
   text: "Chào bạn! Mình là trợ lý SmartTable. Bạn đi mấy người, thích vị gì, ngân sách bao nhiêu? Mình gợi ý món cho nhé.",
 };
-
-// TODO (SCRUM-43): thay bằng fetch("/api/chat", { method: "POST", ... })
-// Trả lời giả, cùng cấu trúc với API thật: { reply, suggestions: [{ id, reason }] }
-function fakeAiReply() {
-  return {
-    reply: "Bạn thử Mỳ cay Hàn Quốc và Khoai tây chiên nhé, mình thấy hợp khẩu vị đó!",
-    suggestions: [
-      { id: "m2", reason: "Cay cấp 3, hợp người thích cay" },
-      { id: "m3", reason: "Món ăn kèm, chia sẻ được" },
-    ],
-  };
-}
 
 function SuggestionCard({ menuItem, reason, onAdd }) {
   const [added, setAdded] = useState(false);
@@ -54,35 +42,73 @@ function SuggestionCard({ menuItem, reason, onAdd }) {
 }
 
 export default function ChatPage() {
-  const { addItem, totalCount } = useCart();
+  const { id: tableId } = useParams();
+  const { addItem } = useCart();
   const [messages, setMessages] = useState([GREETING]);
+  const [menuItems, setMenuItems] = useState([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const bottomRef = useRef(null);
-  const timerRef = useRef(null);
+
+  // Tải menu thật để hiện thẻ món theo id AI gợi ý.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/menu")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.items)) setMenuItems(data.items);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Tự cuộn xuống tin mới nhất.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, typing]);
 
-  // Dọn timer khi rời trang.
-  useEffect(() => () => clearTimeout(timerRef.current), []);
-
-  function handleSend(event) {
+  async function handleSend(event) {
     event.preventDefault();
     const text = input.trim();
     if (!text || typing) return;
+
+    // Lịch sử gửi lên API: bỏ lời chào và thẻ món, chỉ giữ { role, text }.
+    const history = messages
+      .filter((message) => message !== GREETING)
+      .map(({ role, text: content }) => ({ role, text: content }));
 
     setMessages((current) => [...current, { role: "user", text }]);
     setInput("");
     setTyping(true);
 
-    timerRef.current = setTimeout(() => {
-      const { reply, suggestions } = fakeAiReply();
-      setMessages((current) => [...current, { role: "ai", text: reply, suggestions }]);
-      setTyping(false);
-    }, 1200);
+    let aiMessage;
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ table_id: Number(tableId), message: text, history }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || typeof data.reply !== "string") {
+        aiMessage = {
+          role: "ai",
+          text: data.error || "Xin lỗi, mình chưa trả lời được. Bạn thử lại nhé.",
+        };
+      } else {
+        aiMessage = { role: "ai", text: data.reply, suggestions: data.suggestions ?? [] };
+      }
+    } catch {
+      aiMessage = {
+        role: "ai",
+        text: "Không kết nối được tới AI. Bạn kiểm tra mạng rồi thử lại nhé.",
+      };
+    }
+
+    setMessages((current) => [...current, aiMessage]);
+    setTyping(false);
   }
 
   return (
@@ -104,7 +130,7 @@ export default function ChatPage() {
                 </div>
 
                 {message.suggestions?.map((suggestion) => {
-                  const menuItem = mockMenu.find((item) => item.id === suggestion.id);
+                  const menuItem = menuItems.find((item) => item.id === suggestion.id);
                   if (!menuItem) return null; // id không có trong menu thì bỏ qua
                   return (
                     <SuggestionCard
@@ -129,15 +155,6 @@ export default function ChatPage() {
         )}
         <div ref={bottomRef} />
       </div>
-
-      {/* TODO: xóa nút thử này khi SCRUM-43 nối API thật */}
-      <button
-        type="button"
-        onClick={() => addItem(mockMenu[0])}
-        className="mb-2 self-start rounded-xl bg-gray-100 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200"
-      >
-        [Thử] Thêm {mockMenu[0].name} vào giỏ (đang có {totalCount})
-      </button>
 
       <form onSubmit={handleSend} className="flex gap-2">
         <input
