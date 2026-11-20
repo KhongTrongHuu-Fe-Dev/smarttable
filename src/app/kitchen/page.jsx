@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { createSupabaseBrowser } from "@/lib/supabase/browser";
+import { ROLES } from "@/lib/supabase/roles";
 import { ORDER_STATUS } from "@/data/mock";
 import OrderCard from "@/components/kitchen/OrderCard";
 import LogoutButton from "@/components/LogoutButton";
@@ -56,6 +59,21 @@ export default function KitchenPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Chỉ admin mới thấy nút quay về trang quản trị.
+  useEffect(() => {
+    let cancelled = false;
+    createSupabaseBrowser()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!cancelled) setIsAdmin(data?.user?.app_metadata?.role === ROLES.ADMIN);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function applyResult(result) {
     setLoading(false);
@@ -108,6 +126,14 @@ export default function KitchenPage() {
       <div className="mb-6 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Màn hình bếp</h1>
         <div className="flex gap-2">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50"
+          >
+            ← Về quản trị
+          </Link>
+        )}
         <button
           type="button"
           onClick={async () => applyResult(await fetchKitchenData())}

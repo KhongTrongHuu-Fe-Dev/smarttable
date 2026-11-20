@@ -41,7 +41,16 @@ export async function DELETE(request, { params }) {
       .delete()
       .eq("id", id);
 
-    if (error) return Response.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // 23503: món đã nằm trong đơn hàng cũ nên không xóa được
+      if (error.code === "23503") {
+        return Response.json(
+          { error: "Món này đã có trong đơn hàng nên không xóa được. Hãy chuyển sang \"Tạm ngừng bán\"." },
+          { status: 409 }
+        );
+      }
+      return Response.json({ error: error.message }, { status: 400 });
+    }
     return Response.json({ message: "Đã xóa món thành công" });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
