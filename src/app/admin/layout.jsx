@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import LogoutButton from "@/components/LogoutButton";
 
 const menuItems = [
@@ -74,6 +75,7 @@ function MenuIcon({ name }) {
 
 export default function AdminLayout({ children }) {
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false); // menu trượt trên điện thoại
   const currentPage =
     menuItems.find((item) =>
       item.href === "/admin"
@@ -83,8 +85,21 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 text-slate-900">
-      {/* Sidebar dành cho desktop */}
-      <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-slate-950 text-slate-100">
+      {/* Nền mờ phía sau menu trên điện thoại, bấm vào để đóng */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar: cố định bên trái trên máy tính, trượt ra từ mép trái trên điện thoại */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col overflow-y-auto bg-slate-950 text-slate-100 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 ${
+          menuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div className="flex items-center gap-3 border-b border-slate-800 px-6 py-6">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-xl font-bold text-white">
             S
@@ -109,6 +124,7 @@ export default function AdminLayout({ children }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setMenuOpen(false)}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
                   isActive
@@ -130,24 +146,36 @@ export default function AdminLayout({ children }) {
 
       {/* Phần bên phải: header và nội dung của từng trang */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm">
-          <div>
-            <p className="text-xs font-medium text-slate-500">Trang quản trị / {currentPage.label}</p>
-            <h1 className="mt-1 text-xl font-bold text-slate-900">{currentPage.label}</h1>
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 shadow-sm sm:h-20 sm:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Mở menu"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 lg:hidden"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <div className="min-w-0">
+              <p className="hidden text-xs font-medium text-slate-500 sm:block">Trang quản trị / {currentPage.label}</p>
+              <h1 className="truncate text-lg font-bold text-slate-900 sm:mt-1 sm:text-xl">{currentPage.label}</h1>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <LogoutButton />
-            <div className="text-right">
+            <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-800">Quản trị viên</p>
               <p className="text-xs text-slate-500">Administrator</p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700">
+            <div className="hidden h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700 sm:flex">
               AD
             </div>
           </div>
         </header>
 
-        <main className="min-w-0 flex-1 p-8">{children}</main>
+        <main className="min-w-0 flex-1 p-4 sm:p-8">{children}</main>
       </div>
     </div>
   );
