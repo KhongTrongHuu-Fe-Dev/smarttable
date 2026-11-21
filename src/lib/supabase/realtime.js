@@ -2,8 +2,9 @@ import { supabase } from "@/lib/supabase/client";
 
 /**
  * Bếp (Hữu - SCRUM-44): Lắng nghe đơn mới (INSERT) và đơn đổi trạng thái (UPDATE)
+ * onStatus (tùy chọn): nhận trạng thái kết nối ("SUBSCRIBED", "CHANNEL_ERROR", "TIMED_OUT", "CLOSED")
  */
-export function listenOrders(onChange) {
+export function listenOrders(onChange, onStatus) {
   if (!supabase) return () => {};
 
   const handleEvent = (payload) => {
@@ -32,7 +33,9 @@ export function listenOrders(onChange) {
       },
       handleEvent
     )
-    .subscribe();
+    .subscribe((status) => {
+      if (typeof onStatus === "function") onStatus(status);
+    });
 
   return () => {
     supabase.removeChannel(channel);
