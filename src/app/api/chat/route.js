@@ -2,132 +2,183 @@ import { mockMenu, mockCategories } from "@/data/mock";
 import { supabase } from "@/lib/supabase/client";
 import { askGemini } from "@/lib/ai/gemini";
 
-const MAX_SUGGESTIONS = 3;
+const MAX_MESSAGES_PER_HOUR = 20;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 
-// Lấy menu từ Supabase (lỗi hoặc chưa cấu hình thì dùng dữ liệu giả).
-async function loadMenu() {
+// Giới hạn mỗi bàn tối đa 20 tin/giờ
+const rateLimitStore = globalThis.__smarttableChatRateLimit || new Map();
+globalThis.__smarttableChatRateLimit = rateLimitStore;
+
+function checkTableRateLimit(tableId) {
+  const key = String(tableId || "unknown").trim();
+  const now = Date.now();
+  const timestamps = rateLimitStore.get(key) || [];
+
+  const recentTimestamps = timestamps.filter((t) => now - t < ONE_HOUR_MS);
+
+  if (recentTimestamps.length >= MAX_MESSAGES_PER_HOUR) {
+    rateLimitStore.set(key, recentTimestamps);
+    return false;
+  }
+
+  recentTimestamps.push(now);
+  rateLimitStore.set(key, recentTimestamps);
+  return true;
+}
+
+async function getMenuData() {
+  let categories = mockCategories;
+  let items = mockMenu;
+
   if (supabase) {
     const [catsRes, itemsRes] = await Promise.all([
       supabase.from("categories").select("*").order("id"),
       supabase.from("menu_items").select("*").order("id"),
     ]);
+
     if (!catsRes.error && !itemsRes.error) {
-      return { categories: catsRes.data || [], items: itemsRes.data || [] };
+      categories = catsRes.data || [];
+      items = itemsRes.data || [];
     }
   }
-  return { categories: mockCategories, items: mockMenu };
-}
 
-// Danh sách món gửi cho AI, mỗi món có id để AI trả lại đúng id.
-function buildMenuText(categories, items) {
-  if (!items.length) return "Hiện tại thực đơn chưa có món nào.";
-  const categoryName = new Map(categories.map((c) => [String(c.id), c.name]));
+  const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
+  const validMenuMap = new Map();
+  const availableLines = [];
 
-  return items
-    .map((item) => {
-      const cat = categoryName.get(String(item.category_id)) || "Khác";
-      const price = `${Number(item.price || 0).toLocaleString("vi-VN")}đ`;
-      const desc = item.description ? ` - ${item.description}` : "";
-      const spicy = item.spicy_level > 0 ? ` - cay cấp ${item.spicy_level}` : "";
-      const sold = item.is_available === false ? " (TẠM HẾT, không được gợi ý)" : "";
-      return `- id=${item.id} | [${cat}] ${item.name} | ${price}${spicy}${desc}${sold}`;
-    })
-    .join("\n");
-}
+  for (const item of items) {
+    // Loại bỏ món đã hết (is_available === false)
+    if (item.is_available === false) continue;
 
-function buildSystemPrompt(tableId, menuText) {
-  return `Bạn là trợ lý ảo tư vấn gọi món thân thiện, ngắn gọn của nhà hàng SmartTable (đang hỗ trợ khách tại bàn ${tableId || "không xác định"}).
+    const idKey = String(item.id).trim();
+    validMenuMap.set(idKey, item);
 
-QUY TẮC BẮT BUỘC:
-1. CHỈ được nhắc đến và gợi ý các món có trong DANH SÁCH THỰC ĐƠN bên dưới. Tuyệt đối KHÔNG bịa món ngoài thực đơn.
-2. Không gợi ý món đang "TẠM HẾT".
-3. Nếu khách hỏi món không có, hãy báo quán không có món đó và gợi ý 1-2 món phù hợp có sẵn.
-4. Trả lời tiếng Việt tự nhiên, súc tích, tính tổng tiền nếu khách hỏi theo ngân sách.
-5. Nếu khách chỉ chào hỏi hoặc chưa đủ thông tin, hãy hỏi lại và để suggestions rỗng.
-
-ĐỊNH DẠNG TRẢ LỜI: chỉ trả về JSON đúng dạng sau, không thêm chữ nào khác:
-{"reply": "câu trả lời cho khách", "suggestions": [{"id": <id số của món>, "reason": "lý do ngắn gọn"}]}
-Tối đa ${MAX_SUGGESTIONS} món trong suggestions, "id" phải là id có trong danh sách.
-
-DANH SÁCH THỰC ĐƠN HIỆN TẠI:
-${menuText}`;
-}
-
-// Đọc JSON từ câu trả lời của AI (bỏ qua nếu AI bọc thêm ```json).
-function parseAiJson(text) {
-  const cleaned = String(text).replace(/```(?:json)?/gi, "").trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      try {
-        return JSON.parse(cleaned.slice(start, end + 1));
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    const catName = categoryMap.get(item.category_id) || "Khác";
+    const price = item.price ? `${Number(item.price).toLocaleString("vi-VN")}đ` : "0đ";
+    const desc = item.description ? ` | Mô tả: ${item.description}` : "";
+    availableLines.push(`- ID: "${idKey}" | Tên: ${item.name} | Danh mục: ${catName} | Giá: ${price}${desc}`);
   }
+
+  const menuText = availableLines.length
+    ? availableLines.join("\n")
+    : "Hiện tại thực đơn không có món nào khả dụng.";
+
+  return { menuText, validMenuMap };
 }
 
-// Chỉ giữ id có thật trong menu, còn bán, không trùng; loại id AI bịa.
-function validateSuggestions(raw, items) {
-  if (!Array.isArray(raw)) return [];
-  const byId = new Map(items.map((item) => [String(item.id), item]));
-  const seen = new Set();
-  const result = [];
+function parseAiResponse(rawText) {
+  const cleaned = String(rawText || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
 
-  for (const s of raw) {
-    const key = String(s?.id);
-    const item = byId.get(key);
-    if (!item || item.is_available === false || seen.has(key)) continue;
-    seen.add(key);
-    result.push({ id: item.id, reason: String(s.reason || "").slice(0, 200) });
-    if (result.length >= MAX_SUGGESTIONS) break;
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
   }
-  return result;
+
+  return JSON.parse(cleaned);
 }
 
-// POST /api/chat { table_id, message, history: [{ role: "user"|"ai", text }] }
-// -> { reply, suggestions: [{ id, reason }] }   (docs/LIEN_KET.md mục 3.4)
 export async function POST(request) {
   try {
-    const body = await request.json().catch(() => null);
+    const body = await request.json();
     const { table_id, message, history = [] } = body || {};
 
     if (!message || !String(message).trim()) {
-      return Response.json({ error: "Vui lòng nhập nội dung tin nhắn." }, { status: 400 });
+      return Response.json(
+        { error: "Vui lòng nhập nội dung tin nhắn (message)." },
+        { status: 400 }
+      );
     }
 
-    const { categories, items } = await loadMenu();
-    const systemPrompt = buildSystemPrompt(table_id, buildMenuText(categories, items));
+    if (!checkTableRateLimit(table_id)) {
+      return Response.json(
+        { error: "Bàn đã đạt giới hạn 20 tin nhắn/giờ. Vui lòng thử lại sau nhé!" },
+        { status: 429 }
+      );
+    }
 
-    const answer = await askGemini({
+    const { menuText, validMenuMap } = await getMenuData();
+
+    const systemPrompt = `Bạn là trợ lý AI phục vụ ảo chuyên nghiệp, thân thiện của nhà hàng SmartTable (hỗ trợ bàn ${table_id || "không xác định"}).
+
+NHIỆM VỤ & QUY TẮC BẮT BUỘC:
+1. BẮT BUỘC trả về DUY NHẤT một đối tượng JSON hợp lệ (không kèm markdown \`\`\`, không giải thích ngoài JSON) theo đúng cấu trúc:
+{
+  "reply": "Câu trả lời tư vấn thân thiện, súc tích bằng tiếng Việt",
+  "suggestions": [
+    { "id": "id_mon_trong_danh_sach", "reason": "Lý do ngắn gọn vì sao món này hợp với khách" }
+  ]
+}
+2. CHỈ được gợi ý các món có trong DANH SÁCH THỰC ĐƠN CÒN MÓN bên dưới, sử dụng CHÍNH XÁC giá trị trường "ID" của món đó. Tuyệt đối KHÔNG tự bịa ID hoặc tên món ngoài danh sách.
+3. Nếu khách đưa ra yêu cầu về số lượng người, khẩu vị (ví dụ: cay, không cay) và ngân sách (ví dụ: dưới 300k), hãy chọn các món phù hợp sao cho TỔNG GIÁ TIỀN các món được gợi ý nằm trong ngân sách khách yêu cầu.
+4. Nếu khách chỉ chào hỏi chung chung hoặc quán không có món khách tìm, để mảng "suggestions": [] và giải thích lịch sự trong "reply".
+
+DANH SÁCH THỰC ĐƠN CÒN MÓN:
+${menuText}`;
+
+    const rawAiText = await askGemini({
       systemPrompt,
-      message: String(message).trim().slice(0, 500),
-      history: Array.isArray(history) ? history.slice(-10) : [],
-      json: true,
+      message,
+      history,
     });
 
-    const parsed = parseAiJson(answer);
-    if (!parsed || typeof parsed.reply !== "string") {
-      // AI không trả đúng JSON: vẫn trả câu trả lời, không có thẻ món.
-      return Response.json({ reply: String(answer).trim(), suggestions: [] });
+    let parsed;
+    try {
+      parsed = parseAiResponse(rawAiText);
+    } catch {
+      parsed = { reply: rawAiText, suggestions: [] };
+    }
+
+    const reply =
+      typeof parsed?.reply === "string" && parsed.reply.trim()
+        ? parsed.reply.trim()
+        : "Mình đã tìm được một số gợi ý phù hợp cho bàn mình nhé!";
+
+    // Kiểm tra lại từng id có trong menu_items (và còn bán) không, loại bỏ id AI bịa hoặc trùng
+    const verifiedSuggestions = [];
+    const seenIds = new Set();
+
+    if (Array.isArray(parsed?.suggestions)) {
+      for (const item of parsed.suggestions) {
+        if (!item || item.id === undefined || item.id === null) continue;
+
+        const idKey = String(item.id).trim();
+        const realMenuItem = validMenuMap.get(idKey);
+
+        if (!realMenuItem || seenIds.has(idKey)) continue;
+
+        seenIds.add(idKey);
+        verifiedSuggestions.push({
+          id: realMenuItem.id,
+          reason: String(item.reason || "Món ngon phù hợp với yêu cầu của bạn").trim(),
+        });
+      }
     }
 
     return Response.json({
-      reply: parsed.reply.trim(),
-      suggestions: validateSuggestions(parsed.suggestions, items),
+      reply,
+      suggestions: verifiedSuggestions,
     });
   } catch (err) {
-    if (err?.status === 429) {
+    if (
+      err?.status === 429 ||
+      String(err?.message || "").includes("429") ||
+      String(err?.message || "").toLowerCase().includes("quota")
+    ) {
       return Response.json(
         { error: "AI đang bận, bạn thử lại sau ít phút nhé" },
         { status: 429 }
       );
     }
-    return Response.json({ error: "Không thể xử lý yêu cầu của chatbot." }, { status: 500 });
+
+    return Response.json(
+      { error: err.message || "Lỗi xử lý chatbot." },
+      { status: 500 }
+    );
   }
 }
