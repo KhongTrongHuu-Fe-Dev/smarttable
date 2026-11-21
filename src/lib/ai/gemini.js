@@ -1,6 +1,6 @@
 import https from "node:https";
 
-function httpsJsonRequest(urlString, { method = "GET", body = null, timeoutMs = 12000 } = {}) {
+function httpsJsonRequest(urlString, { method = "GET", body = null, timeoutMs = 15000 } = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlString);
     const payloadStr = body ? JSON.stringify(body) : null;
@@ -51,8 +51,7 @@ function httpsJsonRequest(urlString, { method = "GET", body = null, timeoutMs = 
   });
 }
 
-// json = true: bắt Gemini trả về JSON thuần (dùng cho gợi ý món)
-export async function askGemini({ systemPrompt, message, history = [], json = false }) {
+export async function askGemini({ systemPrompt, message, history = [] }) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
@@ -82,15 +81,15 @@ export async function askGemini({ systemPrompt, message, history = [], json = fa
     },
     contents,
     generationConfig: {
-      temperature: 0.4,
-      ...(json ? { responseMimeType: "application/json" } : {}),
+      temperature: 0.3,
+      responseMimeType: "application/json",
     },
   };
 
   async function callModel(modelName) {
     const cleanName = modelName.replace(/^models\//, "");
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanName}:generateContent?key=${apiKey}`;
-    return httpsJsonRequest(url, { method: "POST", body: payload, timeoutMs: 12000 });
+    return httpsJsonRequest(url, { method: "POST", body: payload, timeoutMs: 15000 });
   }
 
   const modelQueue = [
@@ -120,11 +119,11 @@ export async function askGemini({ systemPrompt, message, history = [], json = fa
       }
     }
   } catch {
-    // Bỏ qua nếu lấy danh sách model chậm, dùng danh sách mặc định bên trên
+    // Dùng danh sách mặc định nếu lấy danh sách model chậm
   }
 
   let lastError = null;
-  let lastStatus = null;
+  let isRateLimited = false;
 
   for (const model of modelQueue) {
     try {
@@ -136,9 +135,12 @@ export async function askGemini({ systemPrompt, message, history = [], json = fa
       }
 
       lastError = data?.error?.message || `Lỗi Gemini API (${status})`;
-      lastStatus = status;
 
-      if (status === 400 || status === 401 || status === 403) {
+      if (status === 429 || lastError.toLowerCase().includes("quota")) {
+        isRateLimited = true;
+      }
+
+      if (status === 401 || status === 403 || lastError.includes("API key not valid")) {
         throw new Error(lastError);
       }
     } catch (err) {
@@ -149,11 +151,14 @@ export async function askGemini({ systemPrompt, message, history = [], json = fa
       ) {
         throw err;
       }
-      // Nếu model hiện tại quá tải hoặc quá 12s, tự động chuyển sang model tiếp theo
     }
   }
 
-  const finalError = new Error(lastError || "Không thể kết nối tới các model Gemini.");
-  finalError.status = lastStatus; // 429 = hết quota, route /api/chat dùng để báo cho khách
-  throw finalError;
+  if (isRateLimited) {
+    const quotaError = new Error("AI đang bận, bạn thử lại sau ít phút nhé");
+    quotaError.status = 429;
+    throw quotaError;
+  }
+
+  throw new Error(lastError || "Không thể kết nối tới các model Gemini.");
 }
