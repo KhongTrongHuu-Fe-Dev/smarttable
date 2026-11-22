@@ -123,8 +123,9 @@ ${menuText}`;
 
     const rawAiText = await askGemini({
       systemPrompt,
-      message,
-      history,
+      // Giới hạn độ dài để tránh gửi tin quá lớn tới AI.
+      message: String(message).trim().slice(0, 500),
+      history: Array.isArray(history) ? history.slice(-10) : [],
     });
 
     let parsed;

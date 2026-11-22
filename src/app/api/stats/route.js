@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase/client";
+import { requireRole, ROLES } from "@/lib/supabase/server";
 
 function getTodayVN() {
   return new Date().toLocaleDateString("en-CA", {
@@ -8,6 +8,11 @@ function getTodayVN() {
 
 export async function GET(request) {
   try {
+    // Doanh thu chỉ admin được xem. `supabase` bên dưới mang quyền người đăng nhập.
+    const auth = await requireRole([ROLES.ADMIN]);
+    if (auth.error) return auth.error;
+    const { supabase } = auth;
+
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get("date");
     const date = dateParam ? dateParam.trim() : getTodayVN();

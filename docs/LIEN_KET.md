@@ -209,13 +209,13 @@ Trả về:
 - Hết quota Gemini (lỗi 429): trả mã `429` với `{ "error": "AI đang bận, bạn thử lại sau ít phút nhé" }`
 
 ### 3.5 Thống kê và AI cho admin (Sprint 3)
-**`GET /api/stats?date=2026-11-20`** (Phúc gọi)
+**`GET /api/stats?date=2026-11-20`** (Phúc gọi) - **chỉ admin gọi được** (cần đăng nhập, chưa đăng nhập trả 401, bếp trả 403)
 ```json
 {
   "date": "2026-11-20",
   "total_revenue": 4250000,
   "order_count": 37,
-  "top_items": [ { "menu_item_id": "m2", "name": "Mỳ cay Hàn Quốc", "quantity": 21 } ]
+  "top_items": [ { "menu_item_id": 4, "name": "Mỳ cay Hàn Quốc", "quantity": 21 } ]
 }
 ```
 **`POST /api/ai/summary`** - gửi `{ "date": "2026-11-20" }` → trả `{ "summary": "Hôm nay..." }`
