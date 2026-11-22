@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatPrice } from "@/lib/format";
 import CategoryManager from "@/components/admin/CategoryManager";
+import MenuImage from "@/components/MenuImage";
+import { MENU_IMAGE_ACCEPT, uploadMenuImage, validateMenuImage } from "@/lib/supabase/menu-images";
 
 async function menuRequest(url, options = {}) {
   const response = await fetch(url, { cache: "no-store", ...options });
@@ -81,7 +83,16 @@ export default function AdminMenuPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imageError, setImageError] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    return () => {
+      if (selectedImage) URL.revokeObjectURL(selectedImage.previewUrl);
+    };
+  }, [selectedImage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,9 +125,10 @@ export default function AdminMenuPage() {
     setError("");
     setMessage("");
     try {
+      const body = typeof payload === "function" ? await payload() : payload;
       const data = await menuRequest(url, {
         method,
-        ...(payload ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) } : {}),
+        ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
       });
       onSuccess(data);
     } catch (err) {
@@ -143,6 +155,8 @@ export default function AdminMenuPage() {
     categories.find((category) => category.id === categoryId)?.name ?? "Chưa phân loại";
 
   function openCreateForm() {
+    setSelectedImage(null);
+    setImageError("");
     setEditingId(null);
     setForm({ ...emptyForm, category_id: categories[0]?.id ?? "" });
     setIsFormOpen(true);
@@ -150,6 +164,8 @@ export default function AdminMenuPage() {
   }
 
   function openEditForm(item) {
+    setSelectedImage(null);
+    setImageError("");
     setEditingId(item.id);
     setForm({
       name: item.name ?? "",
@@ -166,13 +182,32 @@ export default function AdminMenuPage() {
 
   function closeForm() {
     if (mutationLock.current) return;
+    setSelectedImage(null);
+    setImageError("");
     setIsFormOpen(false);
     setEditingId(null);
   }
 
   function updateForm(event) {
     const { name, value, type, checked } = event.target;
+    if (name === "image_url") {
+      setSelectedImage(null);
+      setImageError("");
+    }
     setForm((previous) => ({ ...previous, [name]: type === "checkbox" ? checked : value }));
+  }
+
+  function selectImage(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      validateMenuImage(file);
+      setSelectedImage({ file, previewUrl: URL.createObjectURL(file) });
+      setImageError("");
+    } catch (err) {
+      setImageError(err.message);
+    }
   }
 
   async function handleSave(event) {
@@ -205,20 +240,36 @@ export default function AdminMenuPage() {
       is_available: form.is_available,
     };
 
-    if (editingId !== null) {
-      const original = items.find((item) => item.id === editingId);
-      const changes = Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== original[key]));
-      if (Object.keys(changes).length === 0) {
-        closeForm();
-        return;
+    const original = items.find((item) => item.id === editingId);
+    const getChanges = () => Object.fromEntries(Object.entries(payload).filter(([key, value]) => value !== original[key]));
+    if (editingId !== null && !selectedImage && Object.keys(getChanges()).length === 0) {
+      closeForm();
+      return;
+    }
+
+    async function preparePayload() {
+      if (selectedImage) {
+        setUploadingImage(true);
+        try {
+          payload.image_url = await uploadMenuImage(selectedImage.file);
+          // Giữ URL đã upload để thử lưu lại nếu API menu gặp lỗi.
+          setForm((previous) => ({ ...previous, image_url: payload.image_url }));
+          setSelectedImage(null);
+        } finally {
+          setUploadingImage(false);
+        }
       }
-      await mutate(`/api/menu/${encodeURIComponent(editingId)}`, "PATCH", changes, (saved) => {
+      return editingId !== null ? getChanges() : payload;
+    }
+
+    if (editingId !== null) {
+      await mutate(`/api/menu/${encodeURIComponent(editingId)}`, "PATCH", preparePayload, (saved) => {
         setItems((previous) => previous.map((item) => item.id === editingId ? saved : item));
         setMessage(`Đã cập nhật món “${name}”.`);
         setIsFormOpen(false);
       });
     } else {
-      await mutate("/api/menu", "POST", payload, (saved) => {
+      await mutate("/api/menu", "POST", preparePayload, (saved) => {
         setItems((previous) => [saved, ...previous]);
         setMessage(`Đã thêm món “${name}”.`);
         setIsFormOpen(false);
@@ -375,13 +426,7 @@ export default function AdminMenuPage() {
                   <td className="px-5 py-4">
                     <div className="flex min-w-[200px] items-center gap-3">
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-orange-50 text-orange-300">
-                        {item.image_url ? (
-                          // Dùng URL ảnh trực tiếp; chưa cần cấu hình remotePatterns của Next/Image.
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <Icon name="food" size={26} />
-                        )}
+                        <MenuImage src={item.image_url} alt={item.name} fallback={<Icon name="food" size={26} />} />
                       </div>
                       <div className="min-w-0">
                         <p className="font-semibold text-slate-900">{item.name}</p>
@@ -486,8 +531,28 @@ export default function AdminMenuPage() {
               <Field label="Mô tả">
                 <textarea name="description" value={form.description} onChange={updateForm} rows={3} placeholder="Mô tả thành phần, hương vị..." className={inputClass} />
               </Field>
+              <div className="space-y-3">
+                <Field label="Chọn ảnh món ăn">
+                  <input type="file" accept={MENU_IMAGE_ACCEPT} onChange={selectImage} aria-describedby="menu-image-help" className={inputClass} />
+                </Field>
+                <p id="menu-image-help" className="text-xs text-slate-500">JPEG, PNG, WebP hoặc GIF, tối đa 5 MB. Ảnh được tải lên khi lưu món.</p>
+                {imageError && <p role="alert" className="text-sm text-red-600">{imageError}</p>}
+                {(selectedImage || form.image_url) && (
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-orange-50 text-3xl">
+                      <MenuImage src={selectedImage?.previewUrl || form.image_url} alt={form.name || "Ảnh xem trước món ăn"} />
+                    </div>
+                    {selectedImage && (
+                      <div className="min-w-0 space-y-2 text-sm">
+                        <p className="break-words text-slate-600">{selectedImage.file.name}</p>
+                        <button type="button" onClick={() => setSelectedImage(null)} className="font-semibold text-orange-600 hover:underline">Bỏ ảnh đã chọn</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <Field label="Đường dẫn ảnh (image_url)">
-                <input name="image_url" type="url" value={form.image_url} onChange={updateForm} placeholder="https://example.com/mon-an.jpg" className={inputClass} />
+                <input name="image_url" type="url" value={form.image_url} onChange={updateForm} disabled={Boolean(selectedImage)} placeholder="https://example.com/mon-an.jpg" className={inputClass} />
               </Field>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field label="Danh mục" required>
@@ -525,7 +590,7 @@ export default function AdminMenuPage() {
                   Hủy
                 </button>
                 <button type="submit" className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600">
-                  {editingId !== null ? "Lưu thay đổi" : "Thêm món"}
+                  {uploadingImage ? "Đang tải ảnh lên..." : busy ? "Đang lưu..." : editingId !== null ? "Lưu thay đổi" : "Thêm món"}
                 </button>
               </div>
             </form>
