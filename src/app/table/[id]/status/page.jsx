@@ -262,8 +262,16 @@ function StatusContent() {
     }
   }, [requestedOrderId, tableId]);
 
+  // Tải đơn lúc mở trang. Gọi trong callback bất đồng bộ (có cờ cancelled) để
+  // không gọi setState trực tiếp trong effect (quy tắc lint react-hooks).
   useEffect(() => {
-    loadOrders();
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) loadOrders();
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [loadOrders]);
 
   useEffect(() => {

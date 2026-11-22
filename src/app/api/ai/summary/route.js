@@ -1,4 +1,5 @@
 import { askGemini } from "@/lib/ai/gemini";
+import { requireRole, ROLES } from "@/lib/supabase/server";
 
 function getTodayVN() {
   return new Date().toLocaleDateString("en-CA", {
@@ -31,6 +32,10 @@ function extractSummaryText(rawText) {
 
 export async function POST(request) {
   try {
+    // Chỉ admin được dùng (tránh lộ doanh thu / tốn quota Gemini).
+    const auth = await requireRole([ROLES.ADMIN]);
+    if (auth.error) return auth.error;
+
     const body = await request.json().catch(() => ({}));
     const date = body?.date ? String(body.date).trim() : getTodayVN();
 

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase/client";
+import { requireRole, ROLES } from "@/lib/supabase/server";
 
 function fail(message, status = 400) {
   return Response.json({ error: message }, { status });
@@ -6,6 +7,11 @@ function fail(message, status = 400) {
 
 // GET /api/orders?status=pending,cooking&table_id=&date=2026-11-16
 export async function GET(request) {
+  // Danh sách đơn của mọi bàn chỉ dành cho bếp và admin. Khách xem đơn của mình
+  // qua GET /api/orders/[id] (số đơn lưu trong máy khách).
+  const auth = await requireRole([ROLES.ADMIN, ROLES.KITCHEN]);
+  if (auth.error) return auth.error;
+  const supabase = auth.supabase;
   if (!supabase) return fail("Chưa cấu hình Supabase.", 503);
 
   const { searchParams } = new URL(request.url);

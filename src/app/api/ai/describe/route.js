@@ -1,4 +1,5 @@
 import { askGemini } from "@/lib/ai/gemini";
+import { requireRole, ROLES } from "@/lib/supabase/server";
 
 function extractDescriptionText(rawText) {
   const cleaned = String(rawText || "")
@@ -43,6 +44,10 @@ function enforceUnder150Chars(text) {
 
 export async function POST(request) {
   try {
+    // Chỉ admin được dùng (tránh lộ doanh thu / tốn quota Gemini).
+    const auth = await requireRole([ROLES.ADMIN]);
+    if (auth.error) return auth.error;
+
     const body = await request.json().catch(() => ({}));
     const dishName = body?.name ? String(body.name).trim() : "";
 
