@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockCategories, mockMenu } from "@/data/mock";
 import { useCart } from "@/components/customer/CartContext";
+import MenuImage from "@/components/MenuImage";
 
 function formatPrice(price) {
   return `${Number(price || 0).toLocaleString("vi-VN")}đ`;
@@ -17,7 +18,6 @@ export default function Page() {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [keyword, setKeyword] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
-  const [imageError, setImageError] = useState(false);
   const [detailQuantity, setDetailQuantity] = useState(1);
   const [detailNote, setDetailNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -156,8 +156,8 @@ export default function Page() {
               key={item.id}
               className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm"
             >
-              <div className="flex h-36 items-center justify-center bg-gray-100 text-5xl">
-                🍽️
+              <div className="flex h-36 items-center justify-center overflow-hidden bg-gray-100 text-5xl">
+                <MenuImage src={item.image_url} alt={item.name} />
               </div>
 
               <div className="space-y-3 p-4">
@@ -185,7 +185,6 @@ export default function Page() {
                     type="button"
                     onClick={() => {
                       setSelectedItem(item);
-                      setImageError(false);
                       setDetailQuantity(1);
                       setDetailNote("");
                     }}
@@ -221,19 +220,8 @@ export default function Page() {
             className="max-h-[90vh] w-full max-w-md space-y-4 overflow-y-auto rounded-xl bg-white p-5"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="overflow-hidden rounded-xl bg-gray-100">
-              {selectedItem.image_url && !imageError ? (
-                <img
-                  src={selectedItem.image_url}
-                  alt={selectedItem.name}
-                  className="h-56 w-full object-cover"
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <div className="flex h-56 items-center justify-center text-6xl">
-                  🍽️
-                </div>
-              )}
+            <div className="flex h-56 items-center justify-center overflow-hidden rounded-xl bg-gray-100 text-6xl">
+              <MenuImage src={selectedItem.image_url} alt={selectedItem.name} />
             </div>
 
             <h3 id="menu-detail-title" className="text-xl font-bold">
