@@ -67,6 +67,15 @@ export async function POST(request) {
     return fail("Thiếu table_id hoặc danh sách món.");
   }
 
+  // id món trong database là số nguyên. Giỏ hàng cũ có thể còn id dữ liệu giả ("m1")
+  // nên báo lỗi dễ hiểu thay vì để database trả lỗi kỹ thuật.
+  const badItem = items.find((i) => !Number.isInteger(Number(i?.menu_item_id)));
+  if (badItem) {
+    return fail(
+      "Giỏ hàng có món cũ không còn trong thực đơn. Hãy xóa món đó khỏi giỏ rồi chọn lại từ thực đơn."
+    );
+  }
+
   // Lấy giá thật và tên món từ database, không tin số tiền client gửi lên
   const ids = items.map((i) => i.menu_item_id);
   const { data: menu, error: menuErr } = await supabase
