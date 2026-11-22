@@ -29,7 +29,10 @@ export function CartProvider({ children }) {
         if (savedCart) {
           const parsedCart = JSON.parse(savedCart);
           if (Array.isArray(parsedCart)) {
-            setItems(parsedCart);
+            // Bỏ món có id cũ (dữ liệu giả như "m1"), id thật trong database là số nguyên.
+            setItems(
+              parsedCart.filter((item) => Number.isInteger(Number(item?.menu_item_id)))
+            );
           }
         }
       } catch (error) {
