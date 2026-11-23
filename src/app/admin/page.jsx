@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { formatPrice } from "@/lib/format";
+import AISummary from "@/components/admin/AISummary";
 
 function getTodayVN() {
   return new Date().toLocaleDateString("en-CA", {
@@ -125,6 +126,8 @@ function AdminStatsPage() {
         Tính theo ngày tạo đơn, từ 00:00 đến hết ngày (giờ Việt Nam).
         Chỉ gồm đơn đã phục vụ hoặc đã thanh toán.
       </p>
+
+      <AISummary key={`${date}-${loadVersion}`} date={date} today={getTodayVN()} />
 
       {loading && <p role="status" className="text-sm text-slate-500">Đang tải thống kê...</p>}
       {!date && <p role="status" className="text-sm text-slate-500">Chọn ngày để xem thống kê.</p>}
