@@ -87,6 +87,11 @@ export default function AdminMenuPage() {
   const [imageError, setImageError] = useState("");
   const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState("");
+  const [descriptionLoading, setDescriptionLoading] = useState(false);
+  const [descriptionError, setDescriptionError] = useState("");
+  const descriptionRequest = useRef(null);
+
+  useEffect(() => () => descriptionRequest.current?.abort(), []);
 
   useEffect(() => {
     return () => {
@@ -154,7 +159,15 @@ export default function AdminMenuPage() {
   const getCategoryName = (categoryId) =>
     categories.find((category) => category.id === categoryId)?.name ?? "Chưa phân loại";
 
+  function resetDescriptionRequest() {
+    descriptionRequest.current?.abort();
+    descriptionRequest.current = null;
+    setDescriptionLoading(false);
+    setDescriptionError("");
+  }
+
   function openCreateForm() {
+    resetDescriptionRequest();
     setSelectedImage(null);
     setImageError("");
     setEditingId(null);
@@ -164,6 +177,7 @@ export default function AdminMenuPage() {
   }
 
   function openEditForm(item) {
+    resetDescriptionRequest();
     setSelectedImage(null);
     setImageError("");
     setEditingId(item.id);
@@ -182,6 +196,7 @@ export default function AdminMenuPage() {
 
   function closeForm() {
     if (mutationLock.current) return;
+    resetDescriptionRequest();
     setSelectedImage(null);
     setImageError("");
     setIsFormOpen(false);
@@ -190,11 +205,56 @@ export default function AdminMenuPage() {
 
   function updateForm(event) {
     const { name, value, type, checked } = event.target;
+    if (name === "name" || name === "description") resetDescriptionRequest();
     if (name === "image_url") {
       setSelectedImage(null);
       setImageError("");
     }
     setForm((previous) => ({ ...previous, [name]: type === "checkbox" ? checked : value }));
+  }
+
+  async function generateDescription() {
+    const name = form.name.trim();
+    if (!name || descriptionRequest.current || mutationLock.current) return;
+
+    const controller = new AbortController();
+    descriptionRequest.current = controller;
+    setDescriptionLoading(true);
+    setDescriptionError("");
+
+    try {
+      const response = await fetch("/api/ai/describe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.error) {
+        throw new Error(
+          typeof data?.error === "string" && data.error.trim()
+            ? data.error
+            : "Không thể tạo mô tả món ăn. Vui lòng thử lại."
+        );
+      }
+      if (typeof data?.description !== "string" || !data.description.trim()) {
+        throw new Error("AI chưa trả về mô tả hợp lệ. Vui lòng thử lại.");
+      }
+      if (!controller.signal.aborted) {
+        setForm((previous) => ({ ...previous, description: data.description.trim() }));
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        setDescriptionError(err instanceof TypeError
+          ? "Không thể kết nối máy chủ. Vui lòng thử lại."
+          : err.message || "Không thể tạo mô tả món ăn. Vui lòng thử lại.");
+      }
+    } finally {
+      if (descriptionRequest.current === controller) {
+        descriptionRequest.current = null;
+        setDescriptionLoading(false);
+      }
+    }
   }
 
   function selectImage(event) {
@@ -212,6 +272,7 @@ export default function AdminMenuPage() {
 
   async function handleSave(event) {
     event.preventDefault();
+    if (descriptionRequest.current) return;
     const name = form.name.trim();
     const price = Number(form.price);
     const spicyLevel = Number(form.spicy_level);
@@ -528,9 +589,27 @@ export default function AdminMenuPage() {
                   <input name="price" type="number" min="0" step="1" value={form.price} onChange={updateForm} required placeholder="85000" className={inputClass} />
                 </Field>
               </div>
-              <Field label="Mô tả">
-                <textarea name="description" value={form.description} onChange={updateForm} rows={3} placeholder="Mô tả thành phần, hương vị..." className={inputClass} />
-              </Field>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label htmlFor="menu-description" className="text-sm font-semibold text-slate-700">Mô tả</label>
+                  <button
+                    type="button"
+                    onClick={generateDescription}
+                    disabled={descriptionLoading || !form.name.trim()}
+                    aria-controls="menu-description"
+                    aria-busy={descriptionLoading}
+                    className="min-h-10 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {descriptionLoading ? "Đang tạo..." : "AI viết mô tả"}
+                  </button>
+                </div>
+                <textarea id="menu-description" name="description" value={form.description} onChange={updateForm} rows={3} aria-describedby={`menu-description-help${descriptionError ? " menu-description-error" : ""}`} placeholder="Mô tả thành phần, hương vị..." className={inputClass} />
+                <p id="menu-description-help" className="text-xs text-slate-500">
+                  Nhập tên món để AI gợi ý mô tả. Bạn có thể chỉnh sửa nội dung trước khi lưu.
+                </p>
+                <p role="status" className="text-xs text-orange-700">{descriptionLoading ? "Đang tạo mô tả món ăn..." : ""}</p>
+                {descriptionError && <p id="menu-description-error" role="alert" className="text-sm text-red-600">{descriptionError}</p>}
+              </div>
               <div className="space-y-3">
                 <Field label="Chọn ảnh món ăn">
                   <input type="file" accept={MENU_IMAGE_ACCEPT} onChange={selectImage} aria-describedby="menu-image-help" className={inputClass} />
@@ -589,7 +668,7 @@ export default function AdminMenuPage() {
                 <button type="button" onClick={closeForm} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                   Hủy
                 </button>
-                <button type="submit" className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600">
+                <button type="submit" disabled={descriptionLoading} className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">
                   {uploadingImage ? "Đang tải ảnh lên..." : busy ? "Đang lưu..." : editingId !== null ? "Lưu thay đổi" : "Thêm món"}
                 </button>
               </div>
