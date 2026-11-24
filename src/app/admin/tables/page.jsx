@@ -1,19 +1,49 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { mockTables } from "@/data/mock";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const fieldClass =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
 
-// SCRUM-24: CRUD bàn dùng dữ liệu giả. id là định danh bàn, number là số bàn in trên QR.
+// CRUD bàn nối API /api/tables (SCRUM-60). id là định danh bàn, number là số bàn in trên QR.
+async function callApi(url, options) {
+  const res = await fetch(url, { cache: "no-store", ...options });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || "Có lỗi xảy ra, vui lòng thử lại.");
+  return data;
+}
 export default function AdminTablesPage() {
-  const [tables, setTables] = useState(() => mockTables.map((table) => ({ ...table })));
+  const [tables, setTables] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [formNumber, setFormNumber] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [message, setMessage] = useState("");
+
+  const loadTables = useCallback(async () => {
+    try {
+      const data = await callApi("/api/tables");
+      setTables(Array.isArray(data) ? data : []);
+      setError("");
+    } catch (err) {
+      setError(err.message || "Không tải được danh sách bàn.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve().then(() => {
+      if (!cancelled) loadTables();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadTables]);
 
   const sortedTables = useMemo(() => {
     const keyword = search.trim();
@@ -36,8 +66,9 @@ export default function AdminTablesPage() {
     setMessage("");
   }
 
-  function handleSave(event) {
+  async function handleSave(event) {
     event.preventDefault();
+    if (busy) return;
     const number = Number(formNumber);
     if (!Number.isSafeInteger(number) || number <= 0 || !String(formNumber).trim()) {
       window.alert("Số bàn phải là số nguyên dương.");
@@ -48,26 +79,52 @@ export default function AdminTablesPage() {
       return;
     }
 
-    if (editingId !== null) {
-      setTables((previous) =>
-        previous.map((table) =>
-          table.id === editingId ? { ...table, number } : table
-        )
-      );
-      setMessage(`Đã cập nhật bàn số ${number}.`);
-    } else {
-      setTables((previous) => [...previous, { id: `t-${crypto.randomUUID()}`, number }]);
-      setMessage(`Đã thêm bàn số ${number}.`);
+    setBusy(true);
+    try {
+      if (editingId !== null) {
+        await callApi(`/api/tables/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ number }),
+        });
+        setMessage(`Đã cập nhật bàn số ${number}.`);
+      } else {
+        await callApi("/api/tables", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ number }),
+        });
+        setMessage(`Đã thêm bàn số ${number}.`);
+      }
+      setIsFormOpen(false);
+      await loadTables();
+    } catch (err) {
+      window.alert(err.message);
+    } finally {
+      setBusy(false);
     }
-    setIsFormOpen(false);
   }
 
-  function handleDelete(table) {
+  async function handleDelete(table) {
+    if (busy) return;
     if (!window.confirm(`Bạn có chắc muốn xóa bàn số ${table.number} không?`)) {
       return;
     }
-    setTables((previous) => previous.filter((item) => item.id !== table.id));
-    setMessage(`Đã xóa bàn số ${table.number}.`);
+    setBusy(true);
+    try {
+      await callApi(`/api/tables/${table.id}`, { method: "DELETE" });
+      setMessage(`Đã xóa bàn số ${table.number}.`);
+      await loadTables();
+    } catch (err) {
+      const inUse = /foreign key|violates/i.test(err.message);
+      window.alert(
+        inUse
+          ? `Bàn số ${table.number} đã có đơn hàng nên không xóa được.`
+          : err.message
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -101,6 +158,13 @@ export default function AdminTablesPage() {
           </p>
         </div>
       </div>
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {error}
+        </div>
+      )}
+      {loading && <p role="status" className="text-sm text-slate-500">Đang tải danh sách bàn...</p>}
 
       {message && (
         <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
@@ -155,13 +219,13 @@ export default function AdminTablesPage() {
                 </tr>
               ))}
               {sortedTables.length === 0 && (
-                <tr><td colSpan={3} className="px-5 py-10 text-center text-slate-500">Không tìm thấy bàn phù hợp.</td></tr>
+                <tr><td colSpan={3} className="px-5 py-10 text-center text-slate-500">{loading ? "Đang tải..." : "Không tìm thấy bàn phù hợp."}</td></tr>
               )}
             </tbody>
           </table>
         </div>
         <p className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
-          Dữ liệu giả · Số bàn sẽ là thông tin để chức năng mã QR (SCRUM-45) sử dụng sau khi nối API.
+          Dữ liệu lưu trên Supabase · Bàn mới tự có mã QR ở mục Mã QR.
         </p>
       </section>
 
@@ -191,8 +255,8 @@ export default function AdminTablesPage() {
                 <button type="button" onClick={() => setIsFormOpen(false)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                   Hủy
                 </button>
-                <button type="submit" className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600">
-                  {editingId === null ? "Thêm bàn" : "Lưu thay đổi"}
+                <button type="submit" disabled={busy} className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50">
+                  {busy ? "Đang lưu..." : editingId === null ? "Thêm bàn" : "Lưu thay đổi"}
                 </button>
               </div>
             </form>
