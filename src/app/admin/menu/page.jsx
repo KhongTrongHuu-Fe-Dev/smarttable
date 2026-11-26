@@ -136,6 +136,7 @@ export default function AdminMenuPage() {
         ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
       });
       onSuccess(data);
+      return data;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -354,6 +355,27 @@ export default function AdminMenuPage() {
     });
   }
 
+  function saveCategory(id, name) {
+    const creating = id === null;
+    return mutate(
+      creating ? "/api/categories" : `/api/categories/${encodeURIComponent(id)}`,
+      creating ? "POST" : "PATCH",
+      { name },
+      (saved) => {
+        setCategories((previous) => creating
+          ? [...previous, saved]
+          : previous.map((category) => category.id === id ? saved : category));
+      }
+    );
+  }
+
+  function deleteCategory(category) {
+    return mutate(`/api/categories/${encodeURIComponent(category.id)}`, "DELETE", null, () => {
+      setCategories((previous) => previous.filter((row) => row.id !== category.id));
+      setCategoryFilter((previous) => previous === String(category.id) ? "all" : previous);
+    });
+  }
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 pb-8">
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}{!isFormOpen && <button type="button" disabled={busy || loading} onClick={() => setLoadVersion((value) => value + 1)} className="ml-4 underline">Tải lại</button>}</div>}
@@ -383,8 +405,10 @@ export default function AdminMenuPage() {
       {activeTab === "categories" ? (
         <CategoryManager
           categories={categories}
-          readOnly
-          onChange={setCategories}
+          onSave={saveCategory}
+          onDelete={deleteCategory}
+          busy={busy}
+          error={error}
           itemCategoryIds={items.map((item) => item.category_id)}
         />
       ) : (
