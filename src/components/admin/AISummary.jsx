@@ -61,7 +61,7 @@ export default function AISummary({ date, today }) {
     <section aria-labelledby="ai-summary-heading" className="rounded-2xl border border-orange-200 bg-orange-50/50 p-5 sm:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 id="ai-summary-heading" className="text-lg font-bold text-slate-900">Tóm tắt bằng AI</h2>
+          <h2 id="ai-summary-heading" className="text-lg font-bold text-slate-900">Thống kê doanh thu</h2>
           <p className="mt-1 text-sm text-slate-500">
             {date ? `Xem nhận xét nhanh về hoạt động ngày ${displayDate}.` : "Chọn ngày để tạo tóm tắt hoạt động."}
           </p>

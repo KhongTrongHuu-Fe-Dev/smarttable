@@ -9,7 +9,7 @@ export default function CustomerShell({ children, tableId }) {
   const links = [
     { href: `/table/${tableId}`, label: "Thực đơn" },
     { href: `/table/${tableId}/status`, label: "Đơn hàng" },
-    { href: `/table/${tableId}/chat`, label: "Hỏi AI" },
+    { href: `/table/${tableId}/chat`, label: "Gợi ý món" },
   ];
 
   return (
