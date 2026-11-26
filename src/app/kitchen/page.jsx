@@ -195,9 +195,9 @@ export default function KitchenPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-gray-100 p-4 sm:p-6">
+      <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Màn hình bếp</h1>
           <span
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -219,7 +219,8 @@ export default function KitchenPage() {
             </button>
           )}
         </div>
-        <div className="flex gap-2">
+        {/* Điện thoại: lưới 2 cột (nút lẻ cuối chiếm cả hàng) để không tràn màn hình. */}
+        <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:flex-wrap [&>*:last-child:nth-child(odd)]:col-span-2">
         <button
           type="button"
           onClick={() => setSoundOn((value) => !value)}
