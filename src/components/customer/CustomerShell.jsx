@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useCart } from "./CartContext";
+import { useTableNumber } from "./useTableNumber";
 
 export default function CustomerShell({ children, tableId }) {
   const { totalCount } = useCart();
+  const tableNumber = useTableNumber(tableId);
 
   const links = [
     { href: `/table/${tableId}`, label: "Thực đơn" },
@@ -18,7 +20,7 @@ export default function CustomerShell({ children, tableId }) {
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="shrink-0">
             <h1 className="text-lg font-bold">SmartTable</h1>
-            <p className="text-xs text-gray-500">Bàn {tableId}</p>
+            <p className="text-xs text-gray-500">Bàn {tableNumber}</p>
           </div>
 
           <nav
