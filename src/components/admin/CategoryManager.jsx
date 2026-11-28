@@ -6,11 +6,10 @@ const fieldClass =
   "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
 
 /**
- * SCRUM-24: CRUD danh mục (dữ liệu giả).
- * categories và onChange dùng chung state với trang món ăn,
- * nên tên danh mục vừa sửa được cập nhật ngay trong bảng món ăn.
+ * CRUD danh mục qua API. Dùng chung state với trang món ăn và chỉ cập nhật
+ * danh sách sau khi máy chủ xác nhận lưu thành công.
  */
-export default function CategoryManager({ categories, onChange, itemCategoryIds = [], readOnly = false }) {
+export default function CategoryManager({ categories, onSave, onDelete, itemCategoryIds = [], busy = false, error = "" }) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [formName, setFormName] = useState("");
@@ -41,8 +40,9 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
     setIsModalOpen(true);
   }
 
-  function saveCategory(event) {
+  async function saveCategory(event) {
     event.preventDefault();
+    if (busy) return;
     const name = formName.trim();
 
     if (!name) {
@@ -61,24 +61,17 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
       return;
     }
 
-    if (editingId !== null) {
-      onChange((previous) =>
-        previous.map((category) =>
-          category.id === editingId ? { ...category, name } : category
-        )
-      );
-      setMessage(`Đã cập nhật danh mục “${name}”.`);
-    } else {
-      onChange((previous) => [
-        ...previous,
-        { id: `c-${crypto.randomUUID()}`, name },
-      ]);
-      setMessage(`Đã thêm danh mục “${name}”.`);
-    }
+    setMessage("");
+    const saved = await onSave(editingId, name);
+    if (!saved) return;
+    setMessage(editingId !== null
+      ? `Đã cập nhật danh mục “${saved.name}”.`
+      : `Đã thêm danh mục “${saved.name}”.`);
     setIsModalOpen(false);
   }
 
-  function deleteCategory(category) {
+  async function deleteCategory(category) {
+    if (busy) return;
     // Không cho xoá khi có món đang sử dụng category_id này.
     // Tránh danh sách món bị mất tên danh mục khi thao tác CRUD trên UI.
     const used = usageCount(category.id);
@@ -91,7 +84,9 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
     if (!window.confirm(`Bạn có chắc muốn xóa danh mục “${category.name}” không?`)) {
       return;
     }
-    onChange((previous) => previous.filter((row) => row.id !== category.id));
+    setMessage("");
+    const deleted = await onDelete(category);
+    if (!deleted) return;
     setMessage(`Đã xóa danh mục “${category.name}”.`);
   }
 
@@ -112,8 +107,8 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
         <button
           type="button"
           onClick={openCreate}
-          disabled={readOnly}
-          className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600"
+          disabled={busy}
+          className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           + Thêm danh mục
         </button>
@@ -179,7 +174,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
                       <button
                         type="button"
                         onClick={() => openEdit(category)}
-                        disabled={readOnly}
+                        disabled={busy}
                         className="rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-600 hover:bg-orange-50 hover:text-orange-700"
                       >
                         Sửa
@@ -187,7 +182,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
                       <button
                         type="button"
                         onClick={() => deleteCategory(category)}
-                        disabled={readOnly}
+                        disabled={busy}
                         className="rounded-lg border border-red-200 px-3 py-2 font-semibold text-red-600 hover:bg-red-50"
                       >
                         Xóa
@@ -207,7 +202,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
           </table>
         </div>
         <p className="border-t border-slate-100 px-5 py-4 text-xs text-slate-400">
-          {readOnly ? "Danh mục từ API · Chức năng chỉnh sửa danh mục sẽ được nối API trong task riêng." : "Dữ liệu giả · Danh mục đang chứa món chỉ được xóa sau khi chuyển hết các món sang danh mục khác."}
+          Danh mục đang chứa món chỉ được xóa sau khi chuyển hết các món sang danh mục khác.
         </p>
       </div>
 
@@ -219,6 +214,7 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
             </h2>
             <p className="mt-1 text-sm text-slate-500">Nhập tên để phân loại món ăn.</p>
             <form className="mt-6 space-y-5" onSubmit={saveCategory}>
+              {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
               <label className="block text-sm font-semibold text-slate-700">
                 Tên danh mục <span className="text-red-500">*</span>
                 <input
@@ -232,11 +228,11 @@ export default function CategoryManager({ categories, onChange, itemCategoryIds 
                 />
               </label>
               <div className="flex justify-end gap-3">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                <button type="button" disabled={busy} onClick={() => setIsModalOpen(false)} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
                   Hủy
                 </button>
-                <button type="submit" className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600">
-                  {editingId === null ? "Thêm danh mục" : "Lưu thay đổi"}
+                <button type="submit" disabled={busy} className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">
+                  {busy ? "Đang lưu..." : editingId === null ? "Thêm danh mục" : "Lưu thay đổi"}
                 </button>
               </div>
             </form>
