@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ORDER_STATUS } from "@/data/mock";
+import { useTableNumber } from "@/components/customer/useTableNumber";
 import { listenOrder } from "@/lib/supabase/realtime";
 
 const STATUS_STEPS = [
@@ -63,7 +64,7 @@ async function fetchOrder(orderId) {
   return data;
 }
 
-function OrderCard({ order, tableId, onRefresh, refreshing }) {
+function OrderCard({ order, tableNumber, onRefresh, refreshing }) {
   const currentIndex = getStatusIndex(order.status);
   const currentLabel =
     STATUS_STEPS[currentIndex]?.label ||
@@ -75,7 +76,7 @@ function OrderCard({ order, tableId, onRefresh, refreshing }) {
         <div>
           <h2 className="text-lg font-bold">Đơn hàng #{order.id}</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Bàn {order.table_id ?? tableId}
+            Bàn {tableNumber}
           </p>
         </div>
         <span className="rounded-full bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700">
@@ -162,6 +163,7 @@ function StatusContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const tableId = params?.id;
+  const tableNumber = useTableNumber(tableId);
   // Jira dùng ?order=<id>; orderId được hỗ trợ để tương thích CartPageClient hiện tại.
   const requestedOrderId =
     searchParams.get("order") || searchParams.get("orderId");
@@ -313,7 +315,7 @@ function StatusContent() {
         <div>
           <h1 className="text-2xl font-bold">Trạng thái đơn hàng</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Bàn {tableId} · Các đơn đã lưu trên thiết bị này
+            Bàn {tableNumber} · Các đơn đã lưu trên thiết bị này
           </p>
         </div>
         <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
@@ -337,7 +339,7 @@ function StatusContent() {
             <OrderCard
               key={order.id}
               order={order}
-              tableId={tableId}
+              tableNumber={tableNumber}
               onRefresh={handleRefresh}
               refreshing={refreshingId === String(order.id)}
             />

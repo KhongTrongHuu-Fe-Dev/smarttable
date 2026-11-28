@@ -83,6 +83,14 @@ function parseAiResponse(rawText) {
   return JSON.parse(cleaned);
 }
 
+// table_id là id trong database; AI phải gọi khách theo số bàn.
+async function getTableNumber(tableId) {
+  const id = Number(tableId);
+  if (!supabase || !Number.isInteger(id)) return null;
+  const { data } = await supabase.from("tables").select("number").eq("id", id).maybeSingle();
+  return data?.number ?? null;
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -102,9 +110,12 @@ export async function POST(request) {
       );
     }
 
-    const { menuText, validMenuMap } = await getMenuData();
+    const [{ menuText, validMenuMap }, tableNumber] = await Promise.all([
+      getMenuData(),
+      getTableNumber(table_id),
+    ]);
 
-    const systemPrompt = `Bạn là trợ lý AI phục vụ ảo chuyên nghiệp, thân thiện của nhà hàng SmartTable (hỗ trợ bàn ${table_id || "không xác định"}).
+    const systemPrompt = `Bạn là trợ lý AI phục vụ ảo chuyên nghiệp, thân thiện của nhà hàng SmartTable (hỗ trợ bàn ${tableNumber ?? "không xác định"}).
 
 NHIỆM VỤ & QUY TẮC BẮT BUỘC:
 1. BẮT BUỘC trả về DUY NHẤT một đối tượng JSON hợp lệ (không kèm markdown \`\`\`, không giải thích ngoài JSON) theo đúng cấu trúc:

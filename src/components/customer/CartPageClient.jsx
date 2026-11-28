@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useCart } from "./CartContext";
+import { useTableNumber } from "@/components/customer/useTableNumber";
 
 function formatPrice(price) {
   return `${Number(price || 0).toLocaleString("vi-VN")}đ`;
@@ -22,6 +23,7 @@ export default function CartPageClient({ tableId }) {
     totalCount,
   } = useCart();
 
+  const tableNumber = useTableNumber(tableId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -80,7 +82,7 @@ export default function CartPageClient({ tableId }) {
       <div>
         <h2 className="text-2xl font-bold">Giỏ hàng</h2>
         <p className="mt-1 text-sm text-gray-500">
-          Bàn {tableId} · {totalCount} món
+          Bàn {tableNumber} · {totalCount} món
         </p>
       </div>
 
